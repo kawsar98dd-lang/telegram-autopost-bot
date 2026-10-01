@@ -33,11 +33,18 @@ jobs:
         run: |
           python scripts/vendor_htmx.py --if-missing
           python scripts/vendor_htmx.py --verify
-      - name: Full test-suite (PostgreSQL integration tests included)
-        shell: bash
-        run: |
-          python -m unittest discover -s tests -v 2>&1 | tee test.log
-          if grep -E "skipped" test.log; then echo "::error::some tests were skipped - CI requires zero skips"; exit 1; fi
+      - name: CI diagnostics (non-secret facts only)
+        run: python scripts/ci_verify.py diagnostics
+        env:
+          CI: "true"
+      - name: Full test-suite - fails on ANY skip, failure or unexecuted integration test
+        run: python scripts/ci_verify.py run
+      - name: Upload machine-readable test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test-report.json
       - name: Migrations from a clean database, twice (idempotent), via the real CLI
         shell: bash
         env:

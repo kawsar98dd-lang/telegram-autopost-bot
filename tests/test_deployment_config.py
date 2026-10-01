@@ -35,8 +35,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(env["TEST_DATABASE_URL"].startswith("postgresql://"))
         for flag in ("REQUIRE_POSTGRES_TESTS", "REQUIRE_FASTAPI_TESTS", "REQUIRE_VENDORED_HTMX"):
             self.assertEqual(env[flag], "1")
-        self.assertIn('grep -E "skipped" test.log', self.text)
-        self.assertIn("shell: bash", self.text)
+        self.assertIn("python scripts/ci_verify.py run", self.text)
+        self.assertNotIn("grep", self.text.split("Full test-suite")[1].split("Migrations from")[0])  # no fragile text matching
+        self.assertNotIn("--allow-skips", self.text)
+        self.assertIn("python scripts/ci_verify.py diagnostics", self.text)
 
     def test_ci_installs_real_dependencies_and_runs_cli_migrations_twice(self):
         self.assertIn("pip install -r requirements.txt -r requirements-dev.txt", self.text)
