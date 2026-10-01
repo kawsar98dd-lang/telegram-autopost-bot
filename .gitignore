@@ -1,0 +1,33 @@
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.session
+*.session-journal
+
+# Runtime data
+data/
+!data/.gitkeep
+backups/
+logs/
+
+# Seller-only material must never enter the customer repository
+license_server/private/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+*.egg-info/
+dist/
+build/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

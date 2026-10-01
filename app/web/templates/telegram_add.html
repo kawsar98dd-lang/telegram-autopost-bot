@@ -1,0 +1,18 @@
+{% extends "shell.html" %}
+{% block title %}Add Telegram account · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Add Telegram account</h1>
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+<section class="card">
+  <form method="post" action="/telegram/add" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Phone number <input type="tel" name="phone" value="{{ phone }}" placeholder="+8801XXXXXXXXX" required maxlength="30" autocomplete="off"></label>
+    <p class="hint">International format, including the country code.</p>
+    <label>Telegram API ID <input type="text" name="api_id" inputmode="numeric" maxlength="12" autocomplete="off" {{ '' if defaults_available else 'required' }}></label>
+    <label>Telegram API hash <input type="password" name="api_hash" maxlength="64" autocomplete="off" spellcheck="false" {{ '' if defaults_available else 'required' }}></label>
+    <p class="hint">Create them for your own account at my.telegram.org/apps. {% if defaults_available %}Leave both empty to use the credentials configured on this server.{% endif %} They are stored encrypted and never shown again.</p>
+    <button class="btn" type="submit">Send login code</button>
+    <a class="btn secondary" href="/telegram">Cancel</a>
+  </form>
+</section>
+{% endblock %}

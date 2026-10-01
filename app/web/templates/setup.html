@@ -1,0 +1,20 @@
+{% extends "public.html" %}
+{% block title %}Welcome · {{ app_name }}{% endblock %}
+{% block content %}
+<h2>Welcome</h2>
+<p class="muted">Create the administrator account for this installation. This page disappears once the account exists.</p>
+{% if errors %}<ul class="msg bad">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<form method="post" action="/setup" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if token_required %}
+  <label>Setup token <input type="password" name="setup_token" required autocomplete="off"></label>
+  <p class="hint">The value of SETUP_TOKEN from your .env file.</p>
+  {% endif %}
+  <label>Email <input type="email" name="email" value="{{ email }}" required maxlength="254" autocomplete="username"></label>
+  <label>Display name (optional) <input type="text" name="display_name" value="{{ display_name }}" maxlength="80"></label>
+  <label>Password <input type="password" name="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+  <p class="hint">At least 12 characters. Avoid common passwords.</p>
+  <label>Repeat password <input type="password" name="password_confirm" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+  <button class="btn" type="submit">Create administrator</button>
+</form>
+{% endblock %}

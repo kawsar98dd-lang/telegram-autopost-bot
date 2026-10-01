@@ -1,0 +1,75 @@
+# PostgreSQL + one-off migration job + web + worker.
+#   python scripts/generate_keys.py --init-env   # once, then edit APP_URL / Telegram values in .env
+#   docker compose up -d --build
+x-app: &app
+  image: telegram-auto-poster:local
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://poster:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/poster
+    MEDIA_DIR: /srv/data/media
+    AUTO_MIGRATE: "false"   # the migrate service does it once, before web/worker start
+  volumes:
+    - app_data:/srv/data
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: poster
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: poster
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U poster -d poster"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["python", "-m", "app.db.migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *app
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # /health/ready also checks the database connection.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.workers.main"]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # The worker touches this file every loop; stale for 60s = unhealthy.
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/worker.heartbeat')<60 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  pg_data:
+  app_data:

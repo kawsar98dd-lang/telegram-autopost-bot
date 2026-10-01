@@ -1,0 +1,12 @@
+{% extends "public.html" %}
+{% block title %}Sign in · {{ app_name }}{% endblock %}
+{% block content %}
+<h2>Sign in</h2>
+<form method="post" action="/login">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <label>Email <input type="email" name="email" value="{{ email }}" required maxlength="254" autocomplete="username"></label>
+  <label>Password <input type="password" name="password" required maxlength="256" autocomplete="current-password"></label>
+  <button class="btn" type="submit">Sign in</button>
+</form>
+{% endblock %}

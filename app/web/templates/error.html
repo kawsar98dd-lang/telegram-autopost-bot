@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · {{ app_name }}{% endblock %}
+{% block body %}
+<main class="center"><div class="card narrow">
+  <h1 class="brand">{{ app_name }}</h1>
+  <h2>{{ title }}</h2>
+  <p>{{ message }}</p>
+  {% if reference %}<p class="muted">Reference: {{ reference }}</p>{% endif %}
+  <p><a href="{{ '/' if user else '/login' }}">{{ 'Back to dashboard' if user else 'Go to sign in' }}</a></p>
+</div></main>
+{% endblock %}

@@ -1,0 +1,3 @@
+# Extra packages for the test-suite (CI installs both files).
+httpx>=0.27,<1.0
+pyyaml>=6.0

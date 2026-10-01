@@ -1,0 +1,139 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Tests (real PostgreSQL, real FastAPI)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # CI-only throw-away credentials for a container that exists only during this job.
+          POSTGRES_PASSWORD: ci-only-test-password
+          POSTGRES_DB: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci-only-test-password@localhost:5432/test
+      # Turn "skipped because the environment is missing" into a hard failure.
+      REQUIRE_POSTGRES_TESTS: "1"
+      REQUIRE_FASTAPI_TESTS: "1"
+      REQUIRE_VENDORED_HTMX: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Vendor HTMX (checksum verified)
+        run: |
+          python scripts/vendor_htmx.py --if-missing
+          python scripts/vendor_htmx.py --verify
+      - name: Full test-suite (PostgreSQL integration tests included)
+        shell: bash
+        run: |
+          python -m unittest discover -s tests -v 2>&1 | tee test.log
+          if grep -E "skipped" test.log; then echo "::error::some tests were skipped - CI requires zero skips"; exit 1; fi
+      - name: Migrations from a clean database, twice (idempotent), via the real CLI
+        shell: bash
+        env:
+          APP_ENV: development
+          APP_URL: http://localhost:8000
+          APP_SECRET: ci-only-secret-value-not-used-anywhere-else
+          DATABASE_URL: postgresql://postgres:ci-only-test-password@localhost:5432/test
+        run: |
+          export SESSION_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          python - <<'PY'
+          import asyncio, asyncpg
+          async def main():
+              c = await asyncpg.connect("postgresql://postgres:ci-only-test-password@localhost:5432/test")
+              await c.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
+              await c.close()
+          asyncio.run(main())
+          PY
+          python -m app.db.migrate
+          python -m app.db.migrate | grep "already up to date"
+      - name: Start the real FastAPI app with uvicorn against PostgreSQL
+        shell: bash
+        env:
+          APP_ENV: development
+          APP_URL: http://localhost:8000
+          APP_SECRET: ci-only-secret-value-not-used-anywhere-else
+          DATABASE_URL: postgresql://postgres:ci-only-test-password@localhost:5432/test
+          LICENSE_ENFORCEMENT: "false"
+        run: |
+          export SESSION_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          uvicorn --factory app.web.main:create_app --port 8000 > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS localhost:8000/health >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS localhost:8000/health
+          curl -fsS localhost:8000/health/ready
+          curl -fsS -o /dev/null localhost:8000/static/style.css
+          curl -fsS -o /dev/null localhost:8000/static/vendor/htmx.min.js
+          test "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' localhost:8000/login)" = "303 http://localhost:8000/setup"
+          kill %1 || true
+      - name: App log on failure
+        if: failure()
+        run: cat uvicorn.log || true
+
+  docker:
+    name: Docker image and compose stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install cryptography
+      - name: Prepare CI-only .env (generated on the runner, never committed)
+        run: |
+          python scripts/vendor_htmx.py --if-missing
+          python scripts/generate_keys.py --init-env
+          sed -i 's#^APP_ENV=.*#APP_ENV=development#; s#^APP_URL=.*#APP_URL=http://localhost:8000#' .env
+          echo "LICENSE_ENFORCEMENT=false" >> .env
+      - run: docker compose config -q
+      - run: docker compose build
+      - name: HTMX is inside the image and verified
+        run: docker run --rm --entrypoint python telegram-auto-poster:local scripts/vendor_htmx.py --verify
+      - name: No .env file or secret inside the image
+        run: |
+          ! docker run --rm --entrypoint sh telegram-auto-poster:local -c "ls -a /srv | grep -E '^\.env'"
+      - name: Start db + migrate + web + worker
+        run: docker compose up -d
+      - name: Wait until web and worker are healthy
+        run: |
+          for svc in web worker; do
+            ok=0
+            for i in $(seq 1 60); do
+              st=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q $svc)" 2>/dev/null || echo none)
+              [ "$st" = "healthy" ] && ok=1 && break
+              sleep 3
+            done
+            [ "$ok" = "1" ] || { echo "::error::$svc did not become healthy"; docker compose logs; exit 1; }
+          done
+          test "$(docker compose ps -a -q migrate | xargs docker inspect -f '{{.State.ExitCode}}')" = "0"
+      - name: HTTP checks
+        run: |
+          curl -fsS localhost:8000/health/ready
+          curl -fsS -o /dev/null localhost:8000/static/vendor/htmx.min.js
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/login)" = "303"
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v
+
+  # Final gate: green ONLY if both jobs actually ran and succeeded. A skipped, cancelled or
+  # failed job (including the Docker verification) makes the whole pipeline red.
+  verify-all:
+    name: All verifications must have run and passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [test, docker]
+    steps:
+      - run: |
+          echo "test=${{ needs.test.result }} docker=${{ needs.docker.result }}"
+          test "${{ needs.test.result }}" = "success"
+          test "${{ needs.docker.result }}" = "success"

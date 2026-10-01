@@ -1,0 +1,25 @@
+{% extends "shell.html" %}
+{% block title %}Verify Telegram login · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Verify Telegram login</h1>
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+<section class="card">
+  {% if pending.state == 'code_sent' %}
+  <p>Telegram sent a login code to <strong>{{ pending.phone_masked }}</strong> (check the Telegram app on your other devices).</p>
+  <form method="post" action="/telegram/verify/{{ attempt_id }}/code" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Login code <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="12" required></label>
+    <button class="btn" type="submit">Continue</button>
+  </form>
+  {% else %}
+  <p>This account is protected by two-step verification. Enter your Telegram <strong>cloud password</strong>. It is sent to Telegram only and is not saved.</p>
+  <form method="post" action="/telegram/verify/{{ attempt_id }}/password" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Two-step verification password <input type="password" name="password" maxlength="256" required autocomplete="off"></label>
+    <button class="btn" type="submit">Connect</button>
+  </form>
+  {% endif %}
+  <p class="hint">{{ pending.remaining_attempts }} attempt(s) left. The code and password are never stored.</p>
+  <form method="post" action="/telegram/verify/{{ attempt_id }}/cancel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Cancel</button></form>
+</section>
+{% endblock %}

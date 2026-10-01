@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<main class="center">
+  <div class="card narrow">
+    <h1 class="brand">{{ app_name }}</h1>
+    <div id="flash" role="alert">{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}</div>
+    {% block content %}{% endblock %}
+  </div>
+</main>
+{% endblock %}

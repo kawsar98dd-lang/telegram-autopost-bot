@@ -1,0 +1,17 @@
+<section class="card" id="license-card" hx-get="/ui/license-card" hx-trigger="every 60s" hx-swap="outerHTML">
+  <h2>License status</h2>
+  <p><span class="badge {{ lic.tone }}">{{ lic.label }}</span></p>
+  {% if lic.summary.detail %}<p class="muted">{{ lic.summary.detail }}</p>{% endif %}
+  <dl class="facts">
+    {% if lic.summary.license_id %}<dt>License ID</dt><dd>{{ lic.summary.license_id }}</dd>{% endif %}
+    {% if lic.summary.expires_at %}<dt>Expires</dt><dd>{{ lic.summary.expires_at|utc }}</dd>{% endif %}
+    {% if lic.summary.last_verified_at %}<dt>Last verified</dt><dd>{{ lic.summary.last_verified_at|utc }}</dd>{% endif %}
+  </dl>
+  {% if lic.summary.last_attempt_failed %}<p class="msg warn">The last check could not reach the license server.</p>{% endif %}
+  {% if user and user.is_admin and lic.summary.license_id %}
+  <form method="post" action="/license/verify" hx-post="/license/verify" hx-target="#license-card" hx-swap="outerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn secondary" type="submit">Check now</button>
+  </form>
+  {% endif %}
+</section>

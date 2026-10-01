@@ -1,0 +1,29 @@
+{% extends "shell.html" %}
+{% block title %}Account · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Account</h1>
+<section class="card">
+  <dl class="facts">
+    <dt>Email</dt><dd>{{ user.email }}</dd>
+    <dt>Name</dt><dd>{{ user.display_name or '-' }}</dd>
+    <dt>Role</dt><dd>{{ user.role }}</dd>
+  </dl>
+</section>
+<section class="card">
+  <h2>Sessions</h2>
+  <table>
+    <thead><tr><th>Device</th><th>Signed in</th><th>Last active</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+      <tr><td>{{ s.user_agent or 'unknown' }}</td><td>{{ s.created_at|utc }}</td><td>{{ s.last_seen_at|utc }}</td><td>{% if s.current %}<span class="badge ok">this session</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if sessions|length > 1 %}
+  <form method="post" action="/account/sessions/revoke-others">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn secondary" type="submit">Sign out all other sessions</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="topbar">
+  <button class="menu-btn" type="button" data-toggle-nav aria-label="Menu">&#9776;</button>
+  <a class="brand" href="/">{{ app_name }}</a>
+  <div class="spacer"></div>
+  <span class="who">{{ user.display_name or user.email }}</span>
+  <form method="post" action="/logout" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn secondary" type="submit">Log out</button>
+  </form>
+</header>
+<div class="layout">
+  <nav class="sidebar" id="sidebar" aria-label="Main">
+    {% for key, href, label in nav %}
+      <a href="{{ href }}" class="{{ 'active' if key == active else '' }}">{{ label }}</a>
+    {% endfor %}
+    {% if user.is_admin %}<a href="/activate" class="{{ 'active' if active == 'license' else '' }}">License</a>{% endif %}
+  </nav>
+  <main class="content">
+    <div id="flash" role="alert"></div>
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "shell.html" %}
+{% block title %}Dashboard · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="grid">
+  <section class="card stat"><h3>Telegram accounts</h3><p class="big">{{ counts.telegram_accounts }}</p><p class="muted">{{ 'Connected' if counts.telegram_accounts else 'Not connected yet' }}</p></section>
+  <section class="card stat"><h3>Groups</h3><p class="big">{{ counts.telegram_groups }}</p></section>
+  <section class="card stat"><h3>Schedules</h3><p class="big">{{ counts.schedules }}</p></section>
+  <section class="card stat"><h3>Posting jobs</h3><p class="big">{{ counts.posting_jobs }}</p></section>
+</div>
+{% include "partials/license_card.html" %}
+<section class="card"><h2>Getting started</h2>
+  <p class="muted">Connecting your Telegram account, choosing groups and creating schedules arrive in the next releases. The sections in the menu are placeholders for now.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "shell.html" %}
+{% block title %}Telegram accounts · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Telegram accounts</h1>
+{% if notice %}<p class="msg ok">{{ notice }}</p>{% endif %}
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+<section class="card">
+  <p class="muted">Posts are sent through <strong>your own</strong> Telegram account. Connect it once; the session is stored encrypted on this server and can be removed at any time.</p>
+  <p><a class="btn" href="/telegram/add">Add Telegram Account</a></p>
+</section>
+{% if accounts %}
+<section class="card">
+  <table>
+    <thead><tr><th>Account</th><th>Phone</th><th>Telegram ID</th><th>Status</th><th>Last check</th><th></th></tr></thead>
+    <tbody>
+    {% for a in accounts %}
+      <tr>
+        <td>{{ a.first_name or '-' }}{% if a.username %} <span class="muted">@{{ a.username }}</span>{% endif %}</td>
+        <td>{{ a.phone_masked or '-' }}</td>
+        <td>{{ a.tg_user_id }}</td>
+        <td>{% if a.status == 'connected' %}<span class="badge ok">Connected</span>
+            {% elif a.status == 'session_expired' %}<span class="badge bad">Session expired</span>
+            {% else %}<span class="badge warn">Disconnected</span>{% endif %}</td>
+        <td>{{ a.last_seen_at|utc }}</td>
+        <td class="actions">
+          {% if a.status == 'connected' %}
+          <form method="post" action="/telegram/accounts/{{ a.id }}/check" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Check</button></form>
+          <form method="post" action="/telegram/accounts/{{ a.id }}/disconnect" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Disconnect</button></form>
+          {% endif %}
+          <form method="post" action="/telegram/accounts/{{ a.id }}/remove" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Remove</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}
