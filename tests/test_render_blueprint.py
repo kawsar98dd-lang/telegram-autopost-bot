@@ -28,34 +28,53 @@ def generated_value() -> str:
 
 @unittest.skipUnless(yaml, "PyYAML not installed")
 class BlueprintStructureTests(unittest.TestCase):
+    EXISTING_DB = "poster-test-db"
+    REGION = "oregon"
+
     def setUp(self):
         self.bp = yaml.safe_load(BLUEPRINT.read_text(encoding="utf-8"))
         (self.web,) = self.bp["services"]
-        (self.db,) = self.bp["databases"]
         self.env = {e["key"]: e for e in self.web["envVars"]}
 
-    def test_exactly_one_free_docker_web_service_and_one_free_database(self):
-        self.assertEqual(set(self.bp), {"databases", "services"})
+    def test_exactly_one_free_docker_web_service(self):
+        self.assertEqual(set(self.bp), {"services"})
         self.assertEqual((self.web["type"], self.web["runtime"], self.web["plan"]), ("web", "docker", "free"))
-        self.assertEqual(self.db["plan"], "free")
         self.assertEqual(self.web["dockerfilePath"], "./Dockerfile")
         self.assertTrue((ROOT / "Dockerfile").exists())
+
+    def test_the_blueprint_can_never_create_or_modify_a_database(self):
+        # A `databases:` entry named like the hand-made database would make Render try to manage it (and clash with its
+        # PostgreSQL version / region); any other name would create a second, duplicate database.
+        self.assertNotIn("databases", self.bp)
+        self.assertNotIn("envVarGroups", self.bp)
+
+        def keys(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    yield k
+                    yield from keys(v)
+            elif isinstance(node, list):
+                for item in node:
+                    yield from keys(item)
+
+        for forbidden in ("databases", "postgresMajorVersion", "ipAllowList", "databaseName", "diskSizeGB"):
+            self.assertNotIn(forbidden, set(keys(self.bp)), forbidden)  # database settings belong to the existing database
 
     def test_no_worker_cron_or_other_paid_resource(self):
         self.assertEqual([s["type"] for s in self.bp["services"]], ["web"])
         for key in ("disk", "numInstances", "scaling", "preDeployCommand"):
             self.assertNotIn(key, self.web)  # none of these exist on the free plan
 
-    def test_same_region_for_web_and_database(self):
-        self.assertEqual(self.web["region"], self.db["region"])
-
-    def test_database_is_private_only(self):
-        self.assertEqual(self.db["ipAllowList"], [])  # an omitted list would default to "allow everyone"
-        self.assertEqual(self.db["postgresMajorVersion"], "16")
+    def test_region_is_oregon_like_the_existing_database(self):
+        self.assertEqual(self.web["region"], self.REGION)
+        doc = DOC.read_text(encoding="utf-8")
+        self.assertIn("Oregon", doc)  # the database's region is documented as a manual precondition
+        self.assertIn(self.EXISTING_DB, doc)
 
     def test_database_url_is_wired_from_the_internal_connection_string(self):
         wiring = self.env["DATABASE_URL"]
-        self.assertEqual(wiring["fromDatabase"], {"name": self.db["name"], "property": "connectionString"})
+        self.assertEqual(wiring["fromDatabase"], {"name": self.EXISTING_DB, "property": "connectionString"})  # the hand-made DB
+        self.assertEqual(list(wiring), ["key", "fromDatabase"])
         self.assertNotIn("value", wiring)
 
     def test_secrets_are_generated_by_render_never_written_in_the_file(self):
@@ -195,8 +214,9 @@ class MigrationAndSecretsOnRenderTests(unittest.TestCase):
     def test_the_documentation_covers_the_procedure_and_is_honest(self):
         text = DOC.read_text(encoding="utf-8")
         for needle in ("NEVER share secrets", "This has not been run on Render yet", "Blueprint", "SETUP_TOKEN", "Environment",
-                       "Delete Web Service", "Delete Database", "15 minutes", "30 days", "ipAllowList", "RENDER_EXTERNAL_URL",
-                       "APP_ENV=development", "Logs", "STEP3_REAL_TELEGRAM_VERIFICATION.md"):
+                       "Delete Web Service", "Delete Database", "15 minutes", "30 days", "Access Control", "RENDER_EXTERNAL_URL",
+                       "APP_ENV=development", "Logs", "STEP3_REAL_TELEGRAM_VERIFICATION.md", "poster-test-db", "Oregon",
+                       "fromDatabase", "Internal Database URL", "PostgreSQL 18", "render blueprints validate"):
             self.assertIn(needle, text, needle)
         self.assertNotRegex(text, r"(?i)(send|paste|give|share) (it |them |this )?(to |with )?(me|the developer|claude)")
 
