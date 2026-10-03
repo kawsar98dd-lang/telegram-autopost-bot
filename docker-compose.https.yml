@@ -1,0 +1,24 @@
+# TEMPORARY HTTPS TEST ONLY. Adds Caddy (automatic Let's Encrypt certificate) in front of the web service:
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+# Needs in .env: APP_HOST=<public host name>, APP_URL=https://<same host>, WEB_BIND_ADDR=127.0.0.1.
+# PostgreSQL stays unpublished (it has no `ports:` in docker-compose.yml); only Caddy listens on 80/443.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_HOST: ${APP_HOST:?set APP_HOST in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

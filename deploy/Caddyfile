@@ -1,0 +1,6 @@
+# Automatic HTTPS for the temporary test server. {$APP_HOST} comes from the environment (see docker-compose.https.yml).
+# Deliberately NOT enabled: access logging (no request lines in any log) and response compression
+# (compression of pages that contain per-session tokens is avoided on principle).
+{$APP_HOST} {
+	reverse_proxy web:8000
+}

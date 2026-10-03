@@ -138,7 +138,10 @@ def settings_from_env(env: Mapping[str, str]) -> Settings:
         problems.append("APP_ENV must be 'production' or 'development'")
         app_env = "production"
 
-    app_url = g("APP_URL", "http://localhost:8000").rstrip("/")
+    # APP_URL always wins. Only if it is empty, the public URL a hosting platform injects at run time
+    # (Render: RENDER_EXTERNAL_URL, always https://<name>.onrender.com) is used. The very same
+    # validation below applies to whichever value results, so production still requires https://.
+    app_url = (g("APP_URL") or g("RENDER_EXTERNAL_URL") or "http://localhost:8000").rstrip("/")
     if not re.match(r"^https?://[^/\s]+$", app_url):
         problems.append("APP_URL must look like https://poster.example.com (no path)")
     elif app_env == "production" and not app_url.startswith("https://"):

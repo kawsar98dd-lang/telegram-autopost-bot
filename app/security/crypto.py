@@ -30,8 +30,13 @@ def generate_key() -> str:
     return Fernet.generate_key().decode("ascii")
 
 
+def _pad(key: str) -> str:
+    """Restore missing base64 '=' padding. The key must still decode to exactly 32 bytes (Fernet checks)."""
+    return key + "=" * (-len(key) % 4)
+
+
 def parse_keys(raw: str) -> list[str]:
-    keys = [k for k in re.split(r"[,\s]+", raw or "") if k]
+    keys = [_pad(k) for k in re.split(r"[,\s]+", raw or "") if k]
     if not keys:
         raise CryptoError("no encryption key provided")
     for key in keys:

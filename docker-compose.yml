@@ -40,7 +40,7 @@ services:
   web:
     <<: *app
     ports:
-      - "${WEB_PORT:-8000}:8000"
+      - "${WEB_BIND_ADDR:-0.0.0.0}:${WEB_PORT:-8000}:8000"   # temporary HTTPS test: WEB_BIND_ADDR=127.0.0.1
     depends_on:
       db:
         condition: service_healthy

@@ -53,6 +53,19 @@ app. Wrong codes are limited to 5 per login, code requests to 5 per hour per use
 
 This release only connects accounts. It does not post, list groups or schedule anything yet.
 
+## Deploy for the Step 3 real-account test
+
+There is no license server yet, so the real-account test runs in development mode on a trusted home network
+(PC with Docker + Android browser on the same Wi-Fi). Exact steps, PASS/FAIL table and security checklist:
+**[docs/STEP3_REAL_TELEGRAM_VERIFICATION.md](docs/STEP3_REAL_TELEGRAM_VERIFICATION.md)**.
+**Render (Blueprint, Free tier, web + Postgres only):**
+**[docs/STEP3_REAL_TELEGRAM_VERIFICATION_RENDER.md](docs/STEP3_REAL_TELEGRAM_VERIFICATION_RENDER.md)** (`render.yaml`).
+
+**Android only?** Use the temporary HTTPS cloud-server variant:
+**[docs/STEP3_REAL_TELEGRAM_VERIFICATION_ANDROID_CLOUD.md](docs/STEP3_REAL_TELEGRAM_VERIFICATION_ANDROID_CLOUD.md)**
+(`deploy/cloud-init-https-test.sh`, `docker-compose.https.yml`, automatic HTTPS, destroyed afterwards).
+Production deployments need `https://` and a license, and are documented when the license server exists.
+
 ## Run the tests
 
 ```bash
