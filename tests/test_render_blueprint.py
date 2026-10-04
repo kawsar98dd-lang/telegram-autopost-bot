@@ -185,11 +185,18 @@ class GeneratedKeyCompatibilityTests(unittest.TestCase):
         for variant in (padded, padded.rstrip("="), base64.urlsafe_b64encode(raw).decode(), base64.urlsafe_b64encode(raw).decode().rstrip("=")):
             self.assertEqual(Cipher(variant).decrypt(Cipher(padded).encrypt("x", "c"), "c"), "x")
 
-    def test_wrong_length_or_garbage_keys_are_still_rejected(self):
-        for bad in (base64.b64encode(os.urandom(31)).decode(), base64.b64encode(os.urandom(33)).decode(),
-                    base64.b64encode(os.urandom(16)).decode(), "not base64 at all!", "A", "====", ""):
+    def test_too_short_or_garbage_keys_are_still_rejected(self):
+        # 16-byte base64 (24 chars) is too short to be a secure secret; the rest is not a key at all.
+        for bad in (base64.b64encode(os.urandom(16)).decode(), "not base64 at all!", "A", "====", ""):
             with self.assertRaises(CryptoError, msg=bad):
                 Cipher(bad)
+
+    def test_other_length_high_entropy_values_are_now_derived_instead_of_rejected(self):
+        # 31/33-byte values are not Fernet keys; as arbitrary high-entropy secrets they are accepted via HKDF.
+        for size in (31, 33, 48):
+            secret = base64.b64encode(os.urandom(size)).decode()
+            cipher = Cipher(secret)
+            self.assertEqual(cipher.decrypt(cipher.encrypt("x", "c"), "c"), "x")
 
 
 @unittest.skipUnless(yaml, "PyYAML not installed")
@@ -216,7 +223,8 @@ class MigrationAndSecretsOnRenderTests(unittest.TestCase):
         for needle in ("NEVER share secrets", "This has not been run on Render yet", "Blueprint", "SETUP_TOKEN", "Environment",
                        "Delete Web Service", "Delete Database", "15 minutes", "30 days", "Access Control", "RENDER_EXTERNAL_URL",
                        "APP_ENV=development", "Logs", "STEP3_REAL_TELEGRAM_VERIFICATION.md", "poster-test-db", "Oregon",
-                       "fromDatabase", "Internal Database URL", "PostgreSQL 18", "render blueprints validate"):
+                       "fromDatabase", "Internal Database URL", "PostgreSQL 18", "render blueprints validate",
+                       "HKDF-SHA256", "Do not change or regenerate"):
             self.assertIn(needle, text, needle)
         self.assertNotRegex(text, r"(?i)(send|paste|give|share) (it |them |this )?(to |with )?(me|the developer|claude)")
 
