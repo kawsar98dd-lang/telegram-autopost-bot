@@ -216,7 +216,8 @@ async def account_revoke_others(request: Request) -> Response:
     return redirect(request, "/account")
 
 
-from .telegram_routes import TELEGRAM_ROUTES  # noqa: E402  (imports views, not this module)
+from .group_routes import GROUP_ROUTES  # noqa: E402  (imports views, not this module)
+from .telegram_routes import TELEGRAM_ROUTES  # noqa: E402
 
 ROUTES = [
     Route("setup", "GET", "/setup", setup_get, Auth.ANONYMOUS),
@@ -229,10 +230,9 @@ ROUTES = [
     Route("license-verify", "POST", "/license/verify", license_verify_post, Auth.ADMIN),
     Route("license-card", "GET", "/ui/license-card", license_card_get, Auth.USER),
     Route("dashboard", "GET", "/", dashboard, Auth.USER, "dashboard.view"),
-    Route("groups", "GET", "/groups", placeholder("groups", "Groups", "Choose the groups you are allowed to post in. Available in an upcoming release."), Auth.USER, "dashboard.view"),
     Route("schedules", "GET", "/schedules", placeholder("schedules", "Schedules", "Create and manage scheduled posts. Available in an upcoming release."), Auth.USER, "dashboard.view"),
     Route("jobs", "GET", "/jobs", placeholder("jobs", "Posting jobs", "Follow queued, running and finished posts. Available in an upcoming release."), Auth.USER, "dashboard.view"),
     Route("logs", "GET", "/logs", placeholder("logs", "Logs", "Posting history and errors. Available in an upcoming release."), Auth.USER, "dashboard.view"),
     Route("account", "GET", "/account", account_get, Auth.USER, "account.manage"),
     Route("account-revoke", "POST", "/account/sessions/revoke-others", account_revoke_others, Auth.USER, "account.manage"),
-] + TELEGRAM_ROUTES
+] + TELEGRAM_ROUTES + GROUP_ROUTES

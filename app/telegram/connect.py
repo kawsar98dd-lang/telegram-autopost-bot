@@ -294,6 +294,10 @@ class TelegramConnectionService:
         await self._wipe(user_id, account_id, "disconnected", wipe_credentials=True)
         return revoked
 
+    async def expire_session(self, user_id: str, account_id: str) -> None:
+        """Telegram no longer accepts the session: delete it locally and flag the account (reconnect needed)."""
+        await self._wipe(user_id, account_id, "session_expired", wipe_credentials=False)
+
     async def remove(self, user_id: str, account_id: str) -> None:
         await self.disconnect(user_id, account_id)
         await self._db.execute("DELETE FROM telegram_accounts WHERE id = $1 AND user_id = $2", account_id, user_id)

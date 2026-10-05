@@ -1,0 +1,24 @@
+{% extends "shell.html" %}
+{% block title %}Groups · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Groups</h1>
+{% if not accounts %}
+<section class="card">
+  <h2>No Telegram account connected</h2>
+  <p class="muted">Groups are loaded through your own Telegram account. Connect it first.</p>
+  <p><a class="btn" href="/telegram/add">Add Telegram Account</a></p>
+</section>
+{% else %}
+<section class="card">
+  <h2>No connected Telegram account</h2>
+  <p class="muted">Your Telegram account is not connected at the moment, so its groups cannot be loaded.</p>
+  <ul>
+  {% for a in accounts %}
+    <li>{{ a.first_name or 'Account' }}{% if a.username %} @{{ a.username }}{% endif %} -
+      {% if a.status == 'session_expired' %}the Telegram session expired or was ended{% else %}disconnected{% endif %}</li>
+  {% endfor %}
+  </ul>
+  <p><a class="btn" href="/telegram">Open Telegram accounts</a></p>
+</section>
+{% endif %}
+{% endblock %}

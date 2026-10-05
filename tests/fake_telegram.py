@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from app.telegram.errors import (CodeExpired, FloodWait, InvalidApiCredentials, InvalidCode, InvalidPassword,
                                  InvalidPhone, PhoneBanned, SessionRevoked)
+from app.telegram.groups import RawChat
 from app.telegram.service import TelegramClientService, TelegramProfile
 
 _counter = itertools.count(1)
@@ -105,6 +106,17 @@ class FakeClient:
             return None
         return self._profile_for(self.session)
 
+    async def list_groups(self, limit: int):
+        self.world.calls.append(("list_groups", ""))
+        if self.session not in self.world.live:
+            raise SessionRevoked()
+        if self.world.list_flood:
+            raise FloodWait(self.world.list_flood)
+        if self.world.list_error is not None:
+            raise self.world.list_error
+        chats = list(self.world.chats.get(int(self.session.split("|")[1]), []))
+        return chats[:limit], len(chats) > limit
+
     async def log_out(self) -> None:
         self.world.calls.append(("log_out", ""))
         if self.session not in self.world.live:
@@ -123,6 +135,9 @@ class FakeTelegram:
     down: bool = False
     flood: int = 0
     connect_delay: float = 0
+    chats: dict[int, list[RawChat]] = field(default_factory=dict)  # tg_user_id -> dialogs of that account
+    list_flood: int = 0
+    list_error: Exception | None = None
 
     def add_account(self, phone: str, tg_user_id: int, **kw) -> FakeAccount:
         self.accounts[phone] = FakeAccount(tg_user_id, **kw)

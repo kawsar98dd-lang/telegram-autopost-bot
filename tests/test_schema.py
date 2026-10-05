@@ -38,7 +38,7 @@ class MigrationRunnerTests(unittest.IsolatedAsyncioTestCase):
         driver = SqliteMigrationDriver(db)
         first = await run_migrations(driver, discover())
         second = await run_migrations(driver, discover())
-        self.assertEqual(first, ["0001_initial", "0002_auth", "0003_telegram_connect"])
+        self.assertEqual(first, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups"])
         self.assertEqual(second, [])
 
     async def test_modified_migration_is_refused(self):

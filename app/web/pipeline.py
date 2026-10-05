@@ -49,9 +49,10 @@ class WebApp:
         self._routes: dict[str, dict[str, Route]] = {}
         for route in routes:
             self._routes.setdefault(route.path, {})[route.method] = route
-        # Paths such as /telegram/verify/{attempt_id}: ids are 36-character UUIDs, nothing else matches.
+        # Paths such as /telegram/verify/{attempt_id}: ids must have the canonical UUID layout, nothing else matches
+        # (a malformed id is a 404 here instead of a database error further down).
         self._patterns: list[tuple[re.Pattern, dict[str, Route]]] = [
-            (re.compile("^" + re.sub(r"\\\{([a-z_]+)\\\}", r"(?P<\1>[0-9a-fA-F-]{36})", re.escape(path)) + "$"), methods)
+            (re.compile("^" + re.sub(r"\\\{([a-z_]+)\\\}", r"(?P<\1>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})", re.escape(path)) + "$"), methods)
             for path, methods in self._routes.items() if "{" in path
         ]
 

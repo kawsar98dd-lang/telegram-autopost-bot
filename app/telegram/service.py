@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Protocol
 
 from .. import __version__
-from .errors import NetworkProblem, TelegramError, map_telethon_exception
+from .errors import NetworkProblem, SessionRevoked, TelegramError, map_telethon_exception
+from .groups import MAX_DIALOGS, RawChat, raw_chat_from_entity
 
 log = logging.getLogger(__name__)
 OPERATION_TIMEOUT = 40.0
@@ -67,6 +68,7 @@ class ClientAdapter(Protocol):
     async def sign_in_password(self, password: str) -> TelegramProfile: ...
     async def current_profile(self) -> TelegramProfile | None: ...
     async def log_out(self) -> None: ...
+    async def list_groups(self, limit: int) -> tuple[list[RawChat], bool]: ...
     def export_session(self) -> str: ...
 
 
@@ -123,6 +125,15 @@ class TelethonAdapter:
     async def log_out(self) -> None:
         await self._client.log_out()
 
+    async def list_groups(self, limit: int) -> tuple[list[RawChat], bool]:
+        """Read-only: the account's dialogs reduced to neutral snapshots. Returns (chats, truncated)."""
+        if not await self._client.is_user_authorized():
+            raise SessionRevoked()
+        chats: list[RawChat] = []
+        async for dialog in self._client.iter_dialogs(limit=limit + 1, ignore_migrated=True):
+            chats.append(raw_chat_from_entity(dialog.entity, int(dialog.id)))
+        return chats[:limit], len(chats) > limit
+
     def export_session(self) -> str:
         return self._client.session.save()
 
@@ -155,9 +166,9 @@ class TelegramClientService:
             except Exception:
                 log.warning("telegram client did not disconnect cleanly")
 
-    async def _run(self, coro: Awaitable):
+    async def _run(self, coro: Awaitable, timeout: float | None = None):
         try:
-            return await asyncio.wait_for(coro, self._timeout)
+            return await asyncio.wait_for(coro, timeout or self._timeout)
         except TelegramError:
             raise
         except asyncio.TimeoutError:
@@ -201,3 +212,8 @@ class TelegramClientService:
             except TelegramError as exc:
                 if exc.code != "session_revoked":
                     raise
+
+    async def list_groups(self, api_id: int, api_hash: str, session: str, limit: int = MAX_DIALOGS) -> tuple[list[RawChat], bool]:
+        """Read-only listing of the account's group chats. Never sends, joins or changes anything."""
+        async with self._open(api_id, api_hash, session) as client:
+            return await self._run(client.list_groups(limit), timeout=max(self._timeout, 120.0))

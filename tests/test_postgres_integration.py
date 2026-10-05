@@ -43,7 +43,7 @@ class PostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_migrations_apply_once(self):
         from app.db.migrate import ensure_schema
 
-        self.assertEqual(self.first_run, ["0001_initial", "0002_auth", "0003_telegram_connect"])
+        self.assertEqual(self.first_run, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups"])
         self.assertEqual(await ensure_schema(URL), [])
 
     async def test_skip_locked_queue_claim_and_isolation_constraints(self):
@@ -121,6 +121,107 @@ class PostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await limiter.retry_after("k", 3, 100, now + 10), 90)
             await limiter.record("k", 100, now + 200)  # new window
             self.assertEqual(await limiter.retry_after("k", 3, 100, now + 201), 0)
+        finally:
+            await pool.close()
+
+    async def _group_stack(self, pool):
+        """Real PostgreSQL + the real services + the fake Telegram network (no Telegram account involved)."""
+        import time
+
+        from app.config import settings_from_env
+        from app.db.pool import PoolDb
+        from app.security.crypto import Cipher, generate_key
+        from app.telegram.connect import TelegramConnectionService
+        from app.telegram.group_sync import GroupService
+        from app.telegram.groups import RawChat
+        from tests.fake_telegram import GOOD_API_HASH, GOOD_API_ID, FakeTelegram
+        from tests.web_support import BASE_ENV
+
+        world = FakeTelegram()
+        world.add_account("+8801712345678", 111, code="48213")
+        world.add_account("+8801812345678", 222, code="48213")
+        world.chats[111] = [RawChat(kind="megagroup", chat_id=-1001, title="Open Group", username="open_group"),
+                            RawChat(kind="megagroup", chat_id=-1002, title="Announcements", default_send_banned=True),
+                            RawChat(kind="basic", chat_id=-2001, title="Basic Group")]
+        world.chats[222] = [RawChat(kind="megagroup", chat_id=-1001, title="Same Chat Other Account")]
+        db = PoolDb(pool)
+        tg = world.service()
+        connect = TelegramConnectionService(db, Cipher(generate_key()), tg, settings_from_env(BASE_ENV), time.time)
+        users = {}
+        for name in ("one", "two"):
+            uid = uuid.uuid4()
+            await pool.execute("INSERT INTO users (id, email, password_hash) VALUES ($1, $2, 'h')", uid, f"{name}@example.com")
+            users[name] = str(uid)
+
+        async def link(user, phone):
+            attempt = await connect.start(user, phone, str(GOOD_API_ID), GOOD_API_HASH)
+            return (await connect.submit_code(user, attempt, "48213")).account_id
+
+        return world, db, GroupService(db, connect, tg, time.time), users, link
+
+    async def test_groups_sync_selection_and_isolation_on_postgres(self):
+        from app.db.pool import create_pool
+        from app.telegram.connect import AccountNotFound
+        from app.telegram.group_sync import GroupNotFound, NotSelectable
+
+        pool = await create_pool(URL, max_size=8)
+        try:
+            world, db, groups, users, link = await self._group_stack(pool)
+            acc1, acc2 = await link(users["one"], "+8801712345678"), await link(users["two"], "+8801812345678")
+            result = await groups.sync(users["one"], acc1)
+            self.assertEqual((result.total, result.postable), (3, 2))
+            await groups.sync(users["one"], acc1)  # idempotent: the upsert must not duplicate anything
+            await groups.sync(users["two"], acc2)
+            self.assertEqual(await pool.fetchval("SELECT COUNT(*) FROM telegram_groups"), 4)
+            mine = {g["title"]: g for g in await groups.groups(users["one"], acc1)}
+            self.assertEqual(mine["Announcements"]["permission_status"], "no_permission")
+            self.assertEqual(mine["Open Group"]["username"], "open_group")
+            # selection persists across a refresh while valid, and is refused for an unpostable group
+            await groups.save_selection(users["one"], acc1, {mine["Open Group"]["id"]})
+            await groups.sync(users["one"], acc1)
+            self.assertEqual([g["title"] for g in await groups.groups(users["one"], acc1) if g["is_enabled"]], ["Open Group"])
+            with self.assertRaises(NotSelectable):
+                await groups.save_selection(users["one"], acc1, {mine["Announcements"]["id"]})
+            # cross-user manipulation
+            theirs = (await groups.groups(users["two"], acc2))[0]["id"]
+            with self.assertRaises(GroupNotFound):
+                await groups.save_selection(users["one"], acc1, {theirs})
+            with self.assertRaises(AccountNotFound):
+                await groups.save_selection(users["two"], acc1, {mine["Open Group"]["id"]})
+            # a group that disappears is flagged and unselected
+            world.chats[111] = [world.chats[111][1]]
+            await groups.sync(users["one"], acc1)
+            gone = {g["title"]: g for g in await groups.groups(users["one"], acc1)}["Open Group"]
+            self.assertEqual((gone["is_present"], gone["is_enabled"], gone["permission_status"]), (False, False, "unavailable"))
+            self.assertTrue(world.assert_all_clients_closed())
+        finally:
+            await pool.close()
+
+    async def test_group_constraints_indexes_and_concurrent_refresh_on_postgres(self):
+        import asyncio
+
+        from app.db.pool import create_pool
+
+        pool = await create_pool(URL, max_size=8)
+        try:
+            world, db, groups, users, link = await self._group_stack(pool)
+            acc1 = await link(users["one"], "+8801712345678")
+            with self.assertRaises(asyncpg.ForeignKeyViolationError):  # another user + this user's account
+                await pool.execute("INSERT INTO telegram_groups (id, user_id, account_id, tg_chat_id, title, chat_type) "
+                                   "VALUES ($1, $2, $3, 5, 't', 'group')", uuid.uuid4(), uuid.UUID(users["two"]), uuid.UUID(acc1))
+            await pool.execute("INSERT INTO telegram_groups (id, user_id, account_id, tg_chat_id, title, chat_type) "
+                               "VALUES ($1, $2, $3, 5, 't', 'group')", uuid.uuid4(), uuid.UUID(users["one"]), uuid.UUID(acc1))
+            with self.assertRaises(asyncpg.UniqueViolationError):
+                await pool.execute("INSERT INTO telegram_groups (id, user_id, account_id, tg_chat_id, title, chat_type) "
+                                   "VALUES ($1, $2, $3, 5, 't2', 'group')", uuid.uuid4(), uuid.UUID(users["one"]), uuid.UUID(acc1))
+            with self.assertRaises(asyncpg.CheckViolationError):
+                await pool.execute("UPDATE telegram_groups SET permission_status = 'whatever'")
+            names = {r["indexname"] for r in await pool.fetch("SELECT indexname FROM pg_indexes WHERE tablename = 'telegram_groups'")}
+            self.assertLessEqual({"telegram_groups_selected_idx", "telegram_groups_account_idx"}, names)
+            await pool.execute("DELETE FROM telegram_groups")
+            outcomes = await asyncio.gather(groups.sync(users["one"], acc1), groups.sync(users["one"], acc1), return_exceptions=True)
+            self.assertTrue(all(not isinstance(o, Exception) for o in outcomes), outcomes)
+            self.assertEqual(await pool.fetchval("SELECT COUNT(*) FROM telegram_groups"), 3)  # two simultaneous refreshes, no duplicates
         finally:
             await pool.close()
 

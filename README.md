@@ -66,6 +66,12 @@ There is no license server yet, so the real-account test runs in development mod
 (`deploy/cloud-init-https-test.sh`, `docker-compose.https.yml`, automatic HTTPS, destroyed afterwards).
 Production deployments need `https://` and a license, and are documented when the license server exists.
 
+## Groups (Step 4)
+
+After connecting a Telegram account, **Groups** lists the groups that account belongs to, shows where Telegram allows it to post
+and lets you select posting targets. See **[docs/STEP4_GROUPS.md](docs/STEP4_GROUPS.md)** (how permissions are determined, refresh, limits,
+and the manual verification steps). Posting and scheduling come in later steps.
+
 ## Run the tests
 
 ```bash

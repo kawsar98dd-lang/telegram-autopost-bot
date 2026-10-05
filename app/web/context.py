@@ -18,6 +18,7 @@ from ..config import Settings
 from ..licensing.manager import LicenseManager
 from ..security.crypto import Cipher
 from ..telegram.connect import TelegramConnectionService
+from ..telegram.group_sync import GroupService
 from ..telegram.service import TelegramClientService
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -58,6 +59,7 @@ class AppContext:
     sessions: SessionService
     limiter: RateLimiter
     telegram_connect: TelegramConnectionService
+    groups: GroupService
     clock: Callable[[], float] = time.time
     templates: Environment = field(default_factory=make_template_env)
 
@@ -73,10 +75,10 @@ class AppContext:
 def build_context(settings: Settings, db: Any, manager: LicenseManager, *, cipher: Cipher | None = None,
                   telegram: TelegramClientService | None = None, clock=time.time) -> AppContext:
     cipher = cipher or Cipher(settings.session_encryption_key)
+    telegram = telegram or TelegramClientService()
+    connect = TelegramConnectionService(db, cipher, telegram, settings, clock)
     return AppContext(
         settings=settings, db=db, license=manager, users=UserService(db),
         sessions=SessionService(db, clock, settings.session_idle_minutes * 60, settings.session_max_hours * 3600),
-        limiter=RateLimiter(db),
-        telegram_connect=TelegramConnectionService(db, cipher, telegram or TelegramClientService(), settings, clock),
-        clock=clock,
+        limiter=RateLimiter(db), telegram_connect=connect, groups=GroupService(db, connect, telegram, clock), clock=clock,
     )

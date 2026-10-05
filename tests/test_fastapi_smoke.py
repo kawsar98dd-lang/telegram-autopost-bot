@@ -75,6 +75,22 @@ class FastApiSmokeTests(unittest.TestCase):
             self.assertEqual(client.get("/").status_code, 200)
             self.assertIn("Dashboard", client.get("/").text)
 
+    def test_groups_pages_through_real_fastapi(self):
+        env, app = build(activated=True, with_admin=True)
+        with TestClient(app, base_url=BASE, follow_redirects=False) as client:
+            self.assertEqual(client.get("/groups").status_code, 303)  # anonymous -> login
+            token = re.search(r'name="csrf-token" content="([^"]+)"', client.get("/login").text).group(1)
+            client.post("/login", data={"csrf_token": token, "email": "admin@example.com", "password": PASSWORD})
+            page = client.get("/groups")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn("No Telegram account connected", page.text)
+            self.assertNotIn("upcoming release", page.text)
+            token = re.search(r'name="csrf-token" content="([^"]+)"', page.text).group(1)
+            unknown = "00000000-0000-0000-0000-000000000abc"
+            self.assertEqual(client.get(f"/groups/accounts/{unknown}").status_code, 404)  # unknown ids are plain 404s
+            self.assertEqual(client.post(f"/groups/accounts/{unknown}/refresh", data={}).status_code, 403)  # CSRF enforced
+            self.assertEqual(client.post(f"/groups/accounts/{unknown}/refresh", data={"csrf_token": token}).status_code, 404)
+
     def test_license_gate_is_connected(self):
         env, app = build(with_admin=True)  # no license activated
         with TestClient(app, base_url=BASE, follow_redirects=False) as client:

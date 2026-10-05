@@ -1,0 +1,61 @@
+{% extends "shell.html" %}
+{% block title %}Groups · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Groups</h1>
+{% if notice %}<p class="msg ok">{{ notice }}</p>{% endif %}
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+
+<section class="card">
+  <p class="muted">Groups your own Telegram account belongs to. You can select only groups where Telegram currently allows this account to send messages.</p>
+  <p><strong>Telegram account:</strong> {{ account.first_name or 'Account' }}{% if account.username %} <span class="muted">@{{ account.username }}</span>{% endif %}
+     <span class="muted">({{ account.phone_masked or '-' }})</span></p>
+  {% if accounts|length > 1 %}
+  <p>Other accounts:
+    {% for a in accounts %}{% if a.id != account.id %}<a href="/groups/accounts/{{ a.id }}">{{ a.first_name or 'Account' }}{% if a.username %} @{{ a.username }}{% endif %}</a> {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  <p class="muted">Last refreshed: {{ account.groups_synced_at|utc if account.groups_synced_at else 'never' }}</p>
+  <form method="post" action="/groups/accounts/{{ account.id }}/refresh" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn" type="submit">Refresh groups</button>
+  </form>
+</section>
+
+{% if account.status != 'connected' %}
+<section class="card"><h2>Telegram account not connected</h2>
+  <p class="muted">Reconnect the account on the <a href="/telegram">Telegram accounts</a> page, then refresh the groups.</p></section>
+{% elif not account.groups_synced_at %}
+<section class="card"><h2>No groups loaded yet</h2>
+  <p class="muted">Press <strong>Refresh groups</strong> to load the groups of this Telegram account.</p></section>
+{% elif not groups %}
+<section class="card"><h2>No groups found</h2>
+  <p class="muted">This Telegram account is not a member of any group (channels and private chats are not shown). Join a group in Telegram, then refresh.</p></section>
+{% else %}
+<form method="post" action="/groups/accounts/{{ account.id }}/save">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <section class="card">
+    <h2>{{ groups|length }} group{{ '' if groups|length == 1 else 's' }} &middot; {{ postable_count }} can post &middot; {{ selected_count }} selected</h2>
+    {% if postable_count == 0 %}<p class="msg warn">None of these groups currently allows this account to send messages, so none can be selected.</p>{% endif %}
+    <table>
+      <thead><tr><th>Group</th><th>Type</th><th>Posting</th><th>Use</th></tr></thead>
+      <tbody>
+      {% for g in groups %}
+        {% set selectable = g.permission_status == 'ok' and g.is_present %}
+        {% set label = status_labels.get(g.permission_status, status_labels['unknown']) %}
+        <tr>
+          <td><strong>{{ g.title }}</strong><br>
+              <span class="muted">{% if g.username %}Public &middot; @{{ g.username }}{% else %}Private{% endif %} &middot; ID {{ g.tg_chat_id }}</span></td>
+          <td>{{ type_labels.get(g.chat_type, g.chat_type) }}</td>
+          <td><span class="badge {{ label[1] }}">{{ label[0] }}</span>{% if g.permission_detail %}<br><span class="muted">{{ g.permission_detail }}</span>{% endif %}</td>
+          <td>{% if selectable %}<label class="check"><input type="checkbox" name="sel_{{ g.id }}" value="1" {{ 'checked' if g.is_enabled else '' }}> Select</label>
+              {% else %}<span class="muted">Not selectable</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">At most {{ max_selected }} groups can be selected. Telegram's own limits (slow mode, anti-spam) still apply to every post; this page never bypasses them.</p>
+    {% if postable_count %}<button class="btn" type="submit">Save selected groups</button>{% endif %}
+  </section>
+</form>
+{% endif %}
+{% endblock %}
