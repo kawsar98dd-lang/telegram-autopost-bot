@@ -1,0 +1,33 @@
+{% extends "shell.html" %}
+{% block title %}Posts · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Posts</h1>
+{% if notice %}<p class="msg ok">{{ notice }}</p>{% endif %}
+{% if not accounts %}
+<section class="card"><h2>Connect a Telegram account first</h2>
+  <p class="muted">Posts are prepared for a connected Telegram account. Connect one on the <a href="/telegram">Telegram accounts</a> page, then refresh its <a href="/groups">groups</a>.</p></section>
+{% else %}
+<section class="card">
+  <p class="muted">Prepare drafts here. A draft is text, an optional image and the groups it is meant for. Nothing is sent to Telegram from this page.</p>
+  <a class="btn" href="/posts/new">New draft</a>
+</section>
+{% if posts %}
+<section class="card">
+  <table>
+    <thead><tr><th>Draft</th><th>Targets</th><th>Image</th><th>Updated</th></tr></thead>
+    <tbody>
+    {% for p in posts %}
+      <tr>
+        <td><a href="/posts/{{ p.id }}"><strong>{{ p.title or (p.body[:60] if p.body else 'Image post') }}</strong></a><br>
+            <span class="muted">{{ p.first_name or 'Account' }}{% if p.username %} @{{ p.username }}{% endif %} &middot; {{ p.status }}</span></td>
+        <td>{{ p.target_count }}</td><td>{{ 'Yes' if p.has_image else 'No' }}</td><td>{{ p.updated_at|utc }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="card"><p class="muted">No drafts yet.</p></section>
+{% endif %}
+{% endif %}
+{% endblock %}

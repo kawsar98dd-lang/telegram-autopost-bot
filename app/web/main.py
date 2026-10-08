@@ -39,6 +39,7 @@ async def _background(ctx) -> None:
                 await ctx.sessions.purge_expired()
                 await ctx.limiter.purge(int(ctx.clock()))
                 await ctx.telegram_connect.purge_expired()
+                await ctx.posts.purge_orphans()
         except Exception:  # keep the loop alive; secrets are redacted in logs
             log.exception("background task failed")
         ticks += 1

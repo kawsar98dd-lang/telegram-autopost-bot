@@ -1,0 +1,9 @@
+{% extends "shell.html" %}
+{% block title %}New draft · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>New draft</h1>
+<section class="card"><h2>Choose the Telegram account</h2>
+  <p class="muted">The account of a draft cannot be changed later.</p>
+  <ul>{% for a in accounts %}<li><a href="/posts/new/{{ a.id }}">{{ a.first_name or 'Account' }}{% if a.username %} @{{ a.username }}{% endif %}</a></li>{% endfor %}</ul>
+</section>
+{% endblock %}

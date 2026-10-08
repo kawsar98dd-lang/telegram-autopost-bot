@@ -8,7 +8,7 @@ ALL = "*"
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": frozenset({ALL}),
-    "user": frozenset({"dashboard.view", "account.manage", "telegram.manage", "groups.manage"}),
+    "user": frozenset({"dashboard.view", "account.manage", "telegram.manage", "groups.manage", "posts.manage"}),
 }
 
 

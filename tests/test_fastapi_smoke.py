@@ -91,6 +91,27 @@ class FastApiSmokeTests(unittest.TestCase):
             self.assertEqual(client.post(f"/groups/accounts/{unknown}/refresh", data={}).status_code, 403)  # CSRF enforced
             self.assertEqual(client.post(f"/groups/accounts/{unknown}/refresh", data={"csrf_token": token}).status_code, 404)
 
+    def test_posts_and_image_upload_through_real_fastapi(self):
+        from tests.posts_support import png
+
+        env, app = build(activated=True, with_admin=True)
+        with TestClient(app, base_url=BASE, follow_redirects=False) as client:
+            self.assertEqual(client.get("/posts").status_code, 303)  # anonymous -> login
+            token = re.search(r'name="csrf-token" content="([^"]+)"', client.get("/login").text).group(1)
+            client.post("/login", data={"csrf_token": token, "email": "admin@example.com", "password": PASSWORD})
+            page = client.get("/posts")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn("Connect a Telegram account first", page.text)
+            token = re.search(r'name="csrf-token" content="([^"]+)"', page.text).group(1)
+            unknown = "00000000-0000-0000-0000-000000000abc"
+            self.assertEqual(client.get(f"/posts/{unknown}").status_code, 404)
+            self.assertEqual(client.get("/posts/not-a-uuid").status_code, 404)
+            files = {"image": ("a.png", png(), "image/png")}
+            self.assertEqual(client.post("/posts", data={"account_id": unknown, "body": "x"}, files=files).status_code, 403)  # CSRF
+            r = client.post("/posts", data={"csrf_token": token, "account_id": unknown, "body": "x"}, files=files)
+            self.assertEqual(r.status_code, 404)  # unknown account: a plain 404, multipart parsed by the real stack
+            self.assertEqual(client.get(f"/posts/{unknown}/image").status_code, 404)
+
     def test_license_gate_is_connected(self):
         env, app = build(with_admin=True)  # no license activated
         with TestClient(app, base_url=BASE, follow_redirects=False) as client:

@@ -1,0 +1,64 @@
+{% extends "shell.html" %}
+{% block title %}{{ 'Edit draft' if post else 'New draft' }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ 'Edit draft' if post else 'New draft' }}</h1>
+{% if notice %}<p class="msg ok">{{ notice }}</p>{% endif %}
+{% if errors %}<ul class="msg bad">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<form method="post" action="{{ '/posts/' ~ post.id if post else '/posts' }}" enctype="multipart/form-data" data-post-form
+      data-text-limit="{{ text_limit }}" data-caption-limit="{{ caption_limit }}" data-footer-units="{{ footer_units }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if not post %}<input type="hidden" name="account_id" value="{{ account.id }}">{% endif %}
+  <section class="card">
+    <p><strong>Telegram account:</strong> {{ account.first_name or 'Account' }}{% if account.username %} <span class="muted">@{{ account.username }}</span>{% endif %}</p>
+    <label>Title (only for you, never sent)
+      <input type="text" name="title" maxlength="{{ max_title }}" value="{{ form.title }}"></label>
+    <label>Post text
+      <textarea name="body" rows="9" maxlength="{{ max_input }}" data-post-body>{{ form.body }}</textarea></label>
+    <p class="hint" data-post-counter aria-live="polite">Plain text. Line breaks are kept. Nothing is interpreted as formatting.</p>
+    <p class="hint">This footer is added automatically to every post. It cannot be edited or removed here:</p>
+    <pre class="footer-box">{{ footer }}</pre>
+  </section>
+  <section class="card">
+    <h2>Image (optional)</h2>
+    {% if post and post.media %}
+      <p><img class="thumb" src="/posts/{{ post.id }}/image" alt="Current image"></p>
+      <p class="muted">{{ post.media.width }}&times;{{ post.media.height }} &middot; {{ (post.media.size_bytes / 1024)|round|int }} KB</p>
+      <label class="check"><input type="checkbox" name="remove_image" value="1" data-remove-image> Remove this image</label>
+    {% endif %}
+    <label>{{ 'Replace with' if post and post.media else 'Upload' }} a JPG or PNG (max {{ max_image_mb }} MB)
+      <input type="file" name="image" accept="image/jpeg,image/png,.jpg,.jpeg,.png" data-post-image></label>
+    <p class="hint">With an image, the text becomes the photo caption, which Telegram limits to {{ caption_limit }} characters including the footer.</p>
+  </section>
+  <section class="card">
+    <h2>Target groups</h2>
+    {% if stale_targets %}<p class="msg warn">{{ stale_targets|length }} previously selected group{{ '' if stale_targets|length == 1 else 's' }} can no longer be posted to ({% for t in stale_targets %}{{ t.title }}{{ ', ' if not loop.last }}{% endfor %}) and will be removed when you save.</p>{% endif %}
+    {% if not groups %}
+      <p class="muted">No group of this account currently allows posting. Open <a href="/groups">Groups</a> and press Refresh groups.</p>
+    {% else %}
+      <p class="muted">Only groups where Telegram currently lets this account post are listed. At most {{ max_targets }} can be selected. Telegram's own limits (slow mode, anti-spam) still apply later; nothing here bypasses them.</p>
+      <p><input type="search" placeholder="Filter groups" data-group-filter aria-label="Filter groups">
+         <strong data-selected-count>0</strong> selected
+         <button class="btn secondary" type="button" data-select-none>Clear</button></p>
+      <table>
+        <tbody>
+        {% for g in groups %}
+          <tr data-group-row data-title="{{ g.title|lower }}">
+            <td><label class="check"><input type="checkbox" name="sel_{{ g.id }}" value="1" data-group-box {{ 'checked' if g.id|lower in selected else '' }}> <strong>{{ g.title }}</strong></label>
+                {% if g.is_enabled %}<span class="badge ok">In your Groups selection</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+  <button class="btn" type="submit">Save draft</button>
+  {% if post %}<a class="btn secondary" href="/posts/{{ post.id }}/preview">Preview</a>{% endif %}
+  <a href="/posts">Back to posts</a>
+</form>
+{% if post %}
+<form method="post" action="/posts/{{ post.id }}/delete" class="inline" data-confirm="Delete this draft?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <p><button class="btn secondary" type="submit">Delete draft</button></p>
+</form>
+{% endif %}
+{% endblock %}

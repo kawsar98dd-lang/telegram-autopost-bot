@@ -217,6 +217,7 @@ async def account_revoke_others(request: Request) -> Response:
 
 
 from .group_routes import GROUP_ROUTES  # noqa: E402  (imports views, not this module)
+from .post_routes import POST_ROUTES  # noqa: E402
 from .telegram_routes import TELEGRAM_ROUTES  # noqa: E402
 
 ROUTES = [
@@ -235,4 +236,4 @@ ROUTES = [
     Route("logs", "GET", "/logs", placeholder("logs", "Logs", "Posting history and errors. Available in an upcoming release."), Auth.USER, "dashboard.view"),
     Route("account", "GET", "/account", account_get, Auth.USER, "account.manage"),
     Route("account-revoke", "POST", "/account/sessions/revoke-others", account_revoke_others, Auth.USER, "account.manage"),
-] + TELEGRAM_ROUTES + GROUP_ROUTES
+] + TELEGRAM_ROUTES + GROUP_ROUTES + POST_ROUTES

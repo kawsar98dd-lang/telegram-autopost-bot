@@ -73,6 +73,7 @@ class Settings:
     telegram_api_hash: str
     log_level: str
     media_dir: Path
+    media_storage: str
     max_upload_mb: int
     worker_poll_seconds: int
     post_min_interval_seconds: int
@@ -190,6 +191,11 @@ def settings_from_env(env: Mapping[str, str]) -> Settings:
     if override and app_env == "production":
         problems.append("LICENSE_SERVER_URL_OVERRIDE is only allowed when APP_ENV=development")
 
+    media_storage = g("MEDIA_STORAGE", "database").lower()
+    if media_storage not in ("database", "local"):
+        problems.append("MEDIA_STORAGE must be 'database' or 'local'")
+        media_storage = "database"
+
     settings = Settings(
         app_env=app_env,
         app_url=app_url,
@@ -200,6 +206,7 @@ def settings_from_env(env: Mapping[str, str]) -> Settings:
         telegram_api_hash=g("TELEGRAM_API_HASH"),
         log_level=log_level,
         media_dir=Path(g("MEDIA_DIR", "./data/media")),
+        media_storage=media_storage,
         max_upload_mb=_to_int(env, "MAX_UPLOAD_MB", 20, 1, 200, problems),
         worker_poll_seconds=_to_int(env, "WORKER_POLL_SECONDS", 5, 1, 300, problems),
         post_min_interval_seconds=_to_int(env, "POST_MIN_INTERVAL_SECONDS", 5, 1, 3600, problems),

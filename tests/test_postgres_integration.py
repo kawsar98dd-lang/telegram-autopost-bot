@@ -43,7 +43,7 @@ class PostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_migrations_apply_once(self):
         from app.db.migrate import ensure_schema
 
-        self.assertEqual(self.first_run, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups"])
+        self.assertEqual(self.first_run, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups", "0005_posts"])
         self.assertEqual(await ensure_schema(URL), [])
 
     async def test_skip_locked_queue_claim_and_isolation_constraints(self):
@@ -245,6 +245,74 @@ class PostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(first, await get_or_create_installation_id(db))
         finally:
             await pool.close()
+
+    async def test_posts_media_targets_and_isolation_on_postgres(self):
+        from app.config import settings_from_env
+        from app.db.pool import PoolDb, create_pool
+        from app.posts.service import PostNotFound, PostService, Upload
+        from app.posts.storage import DatabaseMediaStorage, new_key
+        from app.telegram.group_sync import GroupNotFound, NotSelectable
+        from tests.posts_support import png
+        from tests.web_support import BASE_ENV
+
+        u1, u2, a1, a2, g1, g2, g_bad = (str(uuid.uuid4()) for _ in range(7))
+        conn = await asyncpg.connect(URL)
+        try:
+            for u, email in ((u1, "p1@example.com"), (u2, "p2@example.com")):
+                await conn.execute("INSERT INTO users (id, email, password_hash) VALUES ($1, $2, 'h')", u, email)
+            for a, u, n in ((a1, u1, 1), (a2, u2, 2)):
+                await conn.execute("INSERT INTO telegram_accounts (id, user_id, tg_user_id) VALUES ($1, $2, $3)", a, u, n)
+            for g, u, a, chat, status in ((g1, u1, a1, 10, "ok"), (g2, u2, a2, 20, "ok"), (g_bad, u1, a1, 11, "no_permission")):
+                await conn.execute("INSERT INTO telegram_groups (id, user_id, account_id, tg_chat_id, title, chat_type, permission_status) "
+                                   "VALUES ($1, $2, $3, $4, 'G', 'supergroup', $5)", g, u, a, chat, status)
+
+            class Connect:  # the real connection service is not needed here: only the account listing is used
+                async def list_accounts(self, user_id):
+                    rows = await conn.fetch("SELECT id, status FROM telegram_accounts WHERE user_id = $1", user_id)
+                    return [{"id": str(r["id"]), "status": r["status"]} for r in rows]
+
+            pool = await create_pool(URL, max_size=3)
+            try:
+                db = PoolDb(pool)
+                settings = settings_from_env(BASE_ENV)
+                svc = PostService(db, Connect(), DatabaseMediaStorage(db, lambda: 1_800_000_000.0), settings, lambda: 1_800_000_000.0)
+                post_id = await svc.create(u1, a1, "Title", "Hello\nworld", {g1}, Upload("a.png", png()))
+                post = await svc.get(u1, post_id)
+                self.assertEqual((post["status"], post["account_id"], len(post["targets"])), ("draft", a1, 1))
+                self.assertEqual(await svc.image(u1, post_id), ("image/png", png()))  # BYTEA round trip
+                data = await svc.preview(u1, post_id)
+                self.assertEqual(data["message"].text.count("Auto Posted by"), 1)
+                with self.assertRaises(PostNotFound):
+                    await svc.get(u2, post_id)
+                with self.assertRaises(PostNotFound):
+                    await svc.image(u2, post_id)
+                with self.assertRaises(PostNotFound):
+                    await svc.create(u2, a1, "", "x", set(), None)
+                with self.assertRaises(GroupNotFound):
+                    await svc.create(u1, a1, "", "x", {g2}, None)
+                with self.assertRaises(NotSelectable):
+                    await svc.create(u1, a1, "", "x", {g_bad}, None)
+                await svc.update(u1, post_id, "T2", "changed", set(), None, True)
+                self.assertEqual(await conn.fetchval("SELECT COUNT(*) FROM post_media"), 0)
+                self.assertEqual(await conn.fetchval("SELECT COUNT(*) FROM media_blobs"), 0)
+                # database-level isolation
+                with self.assertRaises(asyncpg.ForeignKeyViolationError):
+                    await conn.execute("INSERT INTO post_targets (post_id, group_id, account_id, user_id) VALUES ($1, $2, $3, $4)",
+                                       post_id, g2, a1, u1)
+                with self.assertRaises(asyncpg.ForeignKeyViolationError):
+                    await conn.execute("INSERT INTO post_targets (post_id, group_id, account_id, user_id) VALUES ($1, $2, $3, $4)",
+                                       post_id, g2, a2, u1)
+                with self.assertRaises(asyncpg.CheckViolationError):
+                    await conn.execute("UPDATE posts SET status = 'banana' WHERE id = $1", post_id)
+                key = new_key()
+                await DatabaseMediaStorage(db, lambda: 5.0).put(key, b"orphan")
+                self.assertEqual(await svc.purge_orphans(), 1)
+                await svc.delete(u1, post_id)
+                self.assertEqual(await conn.fetchval("SELECT COUNT(*) FROM posts"), 0)
+            finally:
+                await pool.close()
+        finally:
+            await conn.close()
 
 
 if __name__ == "__main__":

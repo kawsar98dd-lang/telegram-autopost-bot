@@ -38,7 +38,7 @@ class MigrationRunnerTests(unittest.IsolatedAsyncioTestCase):
         driver = SqliteMigrationDriver(db)
         first = await run_migrations(driver, discover())
         second = await run_migrations(driver, discover())
-        self.assertEqual(first, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups"])
+        self.assertEqual(first, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups", "0005_posts"])
         self.assertEqual(second, [])
 
     async def test_modified_migration_is_refused(self):
@@ -81,6 +81,9 @@ class SchemaTests(unittest.IsolatedAsyncioTestCase):
             ("posting_jobs", "status"): models.JobStatus,
             ("posting_logs", "level"): models.LogLevel,
             ("telegram_login_attempts", "state"): models.LoginState,
+            ("post_media", "kind"): models.MediaKind,
+            ("post_media", "content_type"): models.MediaContentType,
+            ("post_media", "storage_backend"): models.StorageBackend,
         }
         found = {}
         for table, body in re.findall(r"CREATE TABLE (\w+) \((.*?)\n\);", SQL, re.S):

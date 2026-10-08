@@ -41,6 +41,7 @@ class Route:
     handler: Handler
     auth: Auth = Auth.USER
     permission: str | None = None
+    max_body: int | None = None  # bigger request body allowed (uploads); the default is asgi.MAX_BODY
 
 
 class WebApp:
@@ -55,6 +56,23 @@ class WebApp:
             (re.compile("^" + re.sub(r"\\\{([a-z_]+)\\\}", r"(?P<\1>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})", re.escape(path)) + "$"), methods)
             for path, methods in self._routes.items() if "{" in path
         ]
+
+    def body_limit(self, request: Request) -> int:
+        """Largest body the adapter may read for this request. Upload routes get more, but only when the request carries a
+        session cookie at all; authentication, authorization and CSRF are still enforced afterwards by the pipeline."""
+        from .asgi import MAX_BODY
+
+        methods = self._routes.get(request.path)
+        if methods is None:
+            methods = next((m for pattern, m in self._patterns if pattern.match(request.path)), None)
+        route = methods.get(request.method) if methods else None
+        if route is None or not route.max_body:
+            return MAX_BODY
+        try:
+            has_session = self._ctx().session_cookie in request.cookies
+        except Exception:  # noqa: BLE001 - not started yet
+            has_session = False
+        return route.max_body if has_session else MAX_BODY
 
     # -- entry points used by the ASGI adapter --------------------------------------------
     async def handle(self, request: Request) -> Response:

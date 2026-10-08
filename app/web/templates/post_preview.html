@@ -1,0 +1,20 @@
+{% extends "shell.html" %}
+{% block title %}Preview · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Preview</h1>
+<p class="msg warn">Preview only. Nothing is sent to Telegram.</p>
+{% for p in problems %}<p class="msg bad">{{ p }}</p>{% endfor %}
+<section class="card">
+  <h2>{{ post.title or 'Draft' }}</h2>
+  {% if post.media %}<p><img class="thumb" src="/posts/{{ post.id }}/image" alt="Post image"></p>{% endif %}
+  <p class="muted">{{ 'Photo caption' if message.kind == 'caption' else 'Text message' }} &middot; {{ message.units }} of {{ message.limit }} characters</p>
+  <pre class="message-box">{{ message.text }}</pre>
+</section>
+<section class="card">
+  <h2>{{ post.targets|length }} target group{{ '' if post.targets|length == 1 else 's' }} ({{ eligible_targets }} can currently be posted to)</h2>
+  {% if post.targets %}
+  <ul>{% for t in post.targets %}<li>{{ t.title }}{% if not t.eligible %} <span class="badge bad">not postable now</span>{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">No groups selected.</p>{% endif %}
+</section>
+<a class="btn" href="/posts/{{ post.id }}">Back to editing</a>
+{% endblock %}

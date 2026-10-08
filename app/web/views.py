@@ -10,6 +10,7 @@ NAV = [
     ("dashboard", "/", "Dashboard"),
     ("telegram", "/telegram", "Telegram accounts"),
     ("groups", "/groups", "Groups"),
+    ("posts", "/posts", "Posts"),
     ("schedules", "/schedules", "Schedules"),
     ("jobs", "/jobs", "Posting jobs"),
     ("logs", "/logs", "Logs"),

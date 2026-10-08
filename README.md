@@ -3,7 +3,7 @@
 Schedules marketing posts to Telegram groups **through your own Telegram user account (MTProto)**.
 It does not use the Telegram Bot API and never needs a bot in your groups.
 
-> **Status: Step 3 of the build - Telegram account connection.** Telegram login, group discovery, the post
+> **Status: Step 5 of the build - post drafts, image and footer (Steps 3-4: Telegram connection and groups).** Telegram login, group discovery, the post
 > composer and the actual posting engine are added in the next steps. This README grows with them.
 
 ## What exists in this step
@@ -71,6 +71,10 @@ Production deployments need `https://` and a license, and are documented when th
 After connecting a Telegram account, **Groups** lists the groups that account belongs to, shows where Telegram allows it to post
 and lets you select posting targets. See **[docs/STEP4_GROUPS.md](docs/STEP4_GROUPS.md)** (how permissions are determined, refresh, limits,
 and the manual verification steps). Posting and scheduling come in later steps.
+
+## Posts (Step 5)
+
+Drafts with text, one image and target groups, previewed with the mandatory footer; nothing is sent yet. See [docs/STEP5_POSTS.md](docs/STEP5_POSTS.md).
 
 ## Run the tests
 

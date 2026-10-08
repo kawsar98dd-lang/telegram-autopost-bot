@@ -43,6 +43,7 @@ class Reply:
     headers: dict[str, str]
     set_cookies: list[str]
     body: str
+    raw: bytes = b""
 
     @property
     def location(self) -> str:
@@ -57,7 +58,8 @@ class Client:
     origin: str | None = "https://poster.example.com"
     log: list[Reply] = field(default_factory=list)
 
-    async def request(self, method, path, *, form=None, headers=None, query="", origin=..., ip=None) -> Reply:
+    async def request(self, method, path, *, form=None, headers=None, query="", origin=..., ip=None, files=None,
+                      raw_body=None) -> Reply:
         h = {"host": "poster.example.com", "user-agent": "TestBrowser/1.0"}
         if self.cookies:
             h["cookie"] = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
@@ -68,6 +70,18 @@ class Client:
         if form is not None:
             body = urlencode(form).encode()
             h["content-type"] = "application/x-www-form-urlencoded"
+        if files is not None:  # files = {field: (filename, bytes)}; text fields come from ``form``
+            boundary = "----tapTestBoundary7MA4YWxkTrZu0gW"
+            parts = []
+            for k, v in (form or {}).items():
+                parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+            for k, (fname, data) in files.items():
+                parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"; filename="{fname}"\r\n'
+                             f'Content-Type: application/octet-stream\r\n\r\n'.encode() + data + b"\r\n")
+            body = b"".join(parts) + f"--{boundary}--\r\n".encode()
+            h["content-type"] = f"multipart/form-data; boundary={boundary}"
+        if raw_body is not None:
+            body = raw_body
         h.update({k.lower(): v for k, v in (headers or {}).items()})
         scope = {"type": "http", "method": method, "path": path, "query_string": query.encode(),
                  "headers": [(k.encode(), v.encode()) for k, v in h.items()],
@@ -97,7 +111,8 @@ class Client:
                 self.cookies.pop(name, None)
             else:
                 self.cookies[name] = value
-        reply = Reply(start["status"], hdrs, cookies, b"".join(m.get("body", b"") for m in sent[1:]).decode())
+        raw = b"".join(m.get("body", b"") for m in sent[1:])
+        reply = Reply(start["status"], hdrs, cookies, raw.decode("utf-8", "replace"), raw)
         self.log.append(reply)
         return reply
 
@@ -106,6 +121,9 @@ class Client:
 
     async def post(self, path, form=None, **kw):
         return await self.request("POST", path, form=form if form is not None else {}, **kw)
+
+    async def post_multipart(self, path, form=None, files=None, **kw):
+        return await self.request("POST", path, form=form or {}, files=files or {}, **kw)
 
     def csrf(self, html: str) -> str:
         m = re.search(r'name="csrf-token" content="([^"]+)"', html)

@@ -6,16 +6,17 @@ import logging
 from urllib.parse import parse_qsl
 
 from .http import Request, Response, parse_cookies
+from .multipart import MultipartError, parse_multipart
 
 log = logging.getLogger(__name__)
-MAX_BODY = 32 * 1024  # forms only; file uploads arrive with the post composer step
+MAX_BODY = 32 * 1024  # ordinary forms; routes that accept an upload declare a bigger limit (Route.max_body)
 
 
 class BodyTooLarge(Exception):
     pass
 
 
-async def _read_body(receive) -> bytes:
+async def _read_body(receive, limit: int = MAX_BODY) -> bytes:
     chunks, size = [], 0
     while True:
         message = await receive()
@@ -23,7 +24,7 @@ async def _read_body(receive) -> bytes:
             break
         chunk = message.get("body", b"")
         size += len(chunk)
-        if size > MAX_BODY:
+        if size > limit:
             raise BodyTooLarge()
         chunks.append(chunk)
         if not message.get("more_body"):
@@ -61,8 +62,18 @@ class ASGIAdapter:
         )
         try:
             if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-                body = await _read_body(receive)
-                if headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+                limit = MAX_BODY
+                limit_for = getattr(self.pipeline, "body_limit", None)
+                if limit_for is not None:
+                    limit = limit_for(request)
+                declared = headers.get("content-length", "")
+                if declared.isdigit() and int(declared) > limit:
+                    raise BodyTooLarge()
+                body = await _read_body(receive, limit)
+                content_type = headers.get("content-type", "")
+                if content_type.lower().startswith("multipart/form-data"):
+                    request.form, request.files = parse_multipart(content_type, body)
+                elif content_type.startswith("application/x-www-form-urlencoded"):
                     parsed: dict[str, str] = {}
                     for k, v in parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True):
                         parsed.setdefault(k, v)
@@ -70,6 +81,8 @@ class ASGIAdapter:
             response = await self.pipeline.handle(request)
         except BodyTooLarge:
             response = self.pipeline.error(request, 413)
+        except MultipartError:
+            response = self.pipeline.error(request, 400)
         except Exception:  # last resort; the pipeline normally handles its own errors
             log.exception("unhandled error in ASGI adapter")
             response = self.pipeline.error(request, 500)

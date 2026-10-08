@@ -67,6 +67,30 @@ class JobStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class PostStatus(str, Enum):
+    DRAFT = "draft"
+    READY = "ready"
+    SCHEDULED = "scheduled"
+    SENDING = "sending"
+    SENT = "sent"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class MediaKind(str, Enum):
+    IMAGE = "image"
+
+
+class MediaContentType(str, Enum):
+    JPEG = "image/jpeg"
+    PNG = "image/png"
+
+
+class StorageBackend(str, Enum):
+    DATABASE = "database"
+    LOCAL = "local"
+
+
 class LoginState(str, Enum):
     CODE_SENT = "code_sent"
     PASSWORD_NEEDED = "password_needed"

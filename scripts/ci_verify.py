@@ -30,9 +30,11 @@ sys.path.insert(0, str(ROOT))
 
 # (id prefix, minimum number of tests of that kind that must have run and passed)
 REQUIRED_EXECUTED = {
-    "tests.test_postgres_integration.PostgresTests.": 5,
-    "tests.test_fastapi_smoke.FastApiSmokeTests.": 5,
+    "tests.test_postgres_integration.PostgresTests.": 8,
+    "tests.test_fastapi_smoke.FastApiSmokeTests.": 7,
     "tests.test_web_dashboard_errors.StaticAnalysisTests.test_vendored_htmx_file_matches_the_pinned_checksum": 1,
+    "tests.test_web_posts.": 40,
+    "tests.test_posts_units.": 30,
 }
 REQUIRE_FLAGS = ("REQUIRE_POSTGRES_TESTS", "REQUIRE_FASTAPI_TESTS", "REQUIRE_VENDORED_HTMX")
 

@@ -20,6 +20,7 @@ class Request:
     cookies: dict[str, str] = field(default_factory=dict)
     path_params: dict[str, str] = field(default_factory=dict)
     form: dict[str, str] = field(default_factory=dict)
+    files: dict[str, Any] = field(default_factory=dict)  # uploaded files (multipart/form-data only)
     client_ip: str = "0.0.0.0"
     # filled in by the pipeline
     ctx: Any = None
