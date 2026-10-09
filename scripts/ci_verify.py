@@ -36,8 +36,8 @@ REQUIRED_EXECUTED = {
     "tests.test_web_posts.": 40,
     "tests.test_posts_units.": 30,
     # Step 6: scheduler + worker (the PostgreSQL ones must really run against the CI database)
-    "tests.test_postgres_scheduler.SchedulerPostgresTests.": 5,
-    "tests.test_scheduler_queue.": 42,
+    "tests.test_postgres_scheduler.SchedulerPostgresTests.": 6,
+    "tests.test_scheduler_queue.": 46,
     "tests.test_web_schedules.": 11,
     "tests.test_recurrence.": 19,
     "tests.test_scheduler_policy.": 7,

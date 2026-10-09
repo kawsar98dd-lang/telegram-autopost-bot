@@ -136,6 +136,19 @@ class SchedulerPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(log), 1)
         self.assertNotIn("text", json.loads(log[0]["details"]))                          # audit rows hold ids and codes only
 
+    async def test_recovery_keeps_the_account_lock_of_a_live_worker_on_postgres(self):
+        (u, acc, post, sid, gids), = await self.seed(groups=2)
+        await self.migrate_to_latest()
+        from app.scheduler.queue import JobQueue
+
+        q = JobQueue(self.db, time.time)
+        await q.materialize_due()
+        await q.claim_account_batch("alive", batch=1)               # lease still valid
+        await q.recover_stale()
+        self.assertEqual(await self.pool.fetchval("SELECT send_locked_by FROM telegram_accounts WHERE id = $1", acc), "alive")
+        self.assertEqual(await self.pool.fetchval("SELECT COUNT(*) FROM posting_jobs WHERE status = 'processing'"), 1)
+        self.assertIsNone(await q.claim_account_batch("other"))     # still exclusive to the live worker
+
 
 if __name__ == "__main__":
     unittest.main()

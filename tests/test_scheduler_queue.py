@@ -209,6 +209,50 @@ class ClaimAndRecoveryTests(SchedBase):
         await self.run_all()
         self.assertEqual(self.world.sent, [])              # NOT resent automatically
 
+    def lock_of(self, account):
+        return self.env.db.conn.execute("SELECT send_locked_by FROM telegram_accounts WHERE id=?", (account,)).fetchone()[0]
+
+    async def test_dead_workers_account_lock_is_cleared_even_if_the_lock_itself_has_not_expired(self):
+        await self.schedule()
+        self.due_now()
+        await self.queue.materialize_due()
+        account, jobs = await self.queue.claim_account_batch("dead", lease=1)   # job lease 1 s, account lock 300 s
+        self.env.clock.advance(5)
+        self.assertEqual(self.lock_of(account), "dead")
+        await self.queue.recover_stale()
+        self.assertIsNone(self.lock_of(account))
+        self.assertEqual(self.only_job()["status"], "scheduled")
+
+    async def test_a_live_workers_account_lock_is_not_cleared(self):
+        await self.schedule(groups=(self.g_ok, self.g_ok2))
+        self.due_now()
+        await self.queue.materialize_due()
+        account, jobs = await self.queue.claim_account_batch("alive", batch=1)  # one job claimed, lease still valid
+        await self.queue.recover_stale()
+        self.assertEqual(self.lock_of(account), "alive")
+        self.assertEqual(self.only_job_status("processing"), 1)
+        self.assertIsNone(await self.queue.claim_account_batch("other"))        # the account is still exclusive
+
+    async def test_a_fresh_lock_without_jobs_and_other_accounts_are_untouched(self):
+        await self.schedule()
+        self.env.db.conn.execute("UPDATE telegram_accounts SET send_locked_by='fresh', send_lock_expires_at=? WHERE id=?",
+                                 (self.queue.now() + timedelta(minutes=5), self.acc_alice))
+        self.env.db.conn.execute("UPDATE telegram_accounts SET send_locked_by='bob-worker', send_lock_expires_at=? WHERE id=?",
+                                 (self.queue.now() + timedelta(minutes=5), self.acc_bob))
+        self.env.db.conn.commit()
+        await self.queue.recover_stale()
+        self.assertEqual((self.lock_of(self.acc_alice), self.lock_of(self.acc_bob)), ("fresh", "bob-worker"))
+
+    async def test_expired_lock_without_any_job_is_still_cleared_by_its_own_expiry(self):
+        self.env.db.conn.execute("UPDATE telegram_accounts SET send_locked_by='gone', send_lock_expires_at=? WHERE id=?",
+                                 (self.queue.now() - timedelta(seconds=1), self.acc_alice))
+        self.env.db.conn.commit()
+        await self.queue.recover_stale()
+        self.assertIsNone(self.lock_of(self.acc_alice))
+
+    def only_job_status(self, status):
+        return len(self.jobs(status=status))
+
     async def test_a_job_that_keeps_killing_workers_is_failed(self):
         await self.schedule()
         self.due_now()

@@ -313,6 +313,16 @@ class JobQueue:
           keeps killing the worker is failed instead of looping forever).
         """
         now = self.now()
+        # The account lock of a worker whose job lease has expired is released together with its jobs. This must happen
+        # BEFORE the jobs are recovered (afterwards the evidence, locked_by, is gone) and only for the lock holder that
+        # owns an expired job on that very account and NO job with a live lease there: a worker that is alive keeps
+        # extending its leases, and a lock that was just taken (no jobs claimed yet) is never touched here.
+        await self._db.execute(
+            "UPDATE telegram_accounts SET send_locked_by = NULL, send_lock_expires_at = NULL WHERE send_locked_by IS NOT NULL "
+            "AND EXISTS (SELECT 1 FROM posting_jobs j WHERE j.account_id = telegram_accounts.id "
+            "AND j.locked_by = telegram_accounts.send_locked_by AND j.status = 'processing' AND j.lease_expires_at <= $1) "
+            "AND NOT EXISTS (SELECT 1 FROM posting_jobs j WHERE j.account_id = telegram_accounts.id "
+            "AND j.locked_by = telegram_accounts.send_locked_by AND j.status = 'processing' AND j.lease_expires_at > $1)", now)
         uncertain = await self._db.fetch(
             "UPDATE posting_jobs SET status = 'failed', delivery_state = 'uncertain', error_code = 'delivery_uncertain', "
             "error_message = $2, finished_at = $1, locked_by = NULL, lease_expires_at = NULL, updated_at = $1 "
