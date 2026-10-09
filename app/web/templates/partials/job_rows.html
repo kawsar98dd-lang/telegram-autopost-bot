@@ -1,0 +1,17 @@
+{% for j in jobs %}
+  <tr>
+    <td><strong>{{ j.post_title or (j.post_body[:40] if j.post_body else 'Post') }}</strong><br><span class="muted">{{ j.group_title }}</span></td>
+    <td><span class="badge {{ j.tone }}">{{ j.state }}</span>{% if j.needs_attention %} <span class="badge bad">needs attention</span>{% endif %}
+        {% if j.error_message %}<br><span class="muted">{{ j.error_message }}</span>{% endif %}
+        {% if j.status == 'waiting' %}<br><span class="muted">Next attempt: {{ j.next_attempt_at|utc }}</span>{% endif %}</td>
+    <td>{{ j.scheduled_for|utc }}<br><span class="muted">attempt {{ j.attempts }} of {{ j.max_attempts }}</span></td>
+    <td>
+      {% if j.status == 'failed' and j.delivery_state == 'uncertain' %}
+        <form method="post" action="/jobs/{{ j.id }}/resolve" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="confirm_sent"><button class="btn secondary" type="submit">It was delivered</button></form>
+        <form method="post" action="/jobs/{{ j.id }}/resolve" class="inline" data-confirm="The post may already be in the group. Sending again can create a duplicate. Send again?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="retry"><button class="btn secondary" type="submit">Send again</button></form>
+      {% elif j.status == 'failed' %}
+        <form method="post" action="/jobs/{{ j.id }}/resolve" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="retry"><button class="btn secondary" type="submit">Retry</button></form>
+      {% endif %}
+    </td>
+  </tr>
+{% endfor %}

@@ -16,5 +16,6 @@
   <ul>{% for t in post.targets %}<li>{{ t.title }}{% if not t.eligible %} <span class="badge bad">not postable now</span>{% endif %}</li>{% endfor %}</ul>
   {% else %}<p class="muted">No groups selected.</p>{% endif %}
 </section>
-<a class="btn" href="/posts/{{ post.id }}">Back to editing</a>
+{% if post.status == 'draft' %}<a class="btn" href="/schedules/new/{{ post.id }}">Schedule this post</a>{% endif %}
+<a class="btn secondary" href="/posts/{{ post.id }}">Back to editing</a>
 {% endblock %}

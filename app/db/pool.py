@@ -18,6 +18,8 @@ async def create_pool(database_url: str, max_size: int = 10):
 class PoolDb:
     """Minimal database facade used by the license store (and later services)."""
 
+    dialect = "postgres"  # lets the job queue add FOR UPDATE SKIP LOCKED (the offline SQLite test database has none)
+
     def __init__(self, pool) -> None:
         self._pool = pool
 

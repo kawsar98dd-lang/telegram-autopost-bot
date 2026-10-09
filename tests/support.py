@@ -9,6 +9,7 @@ import re
 import sqlite3
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,9 +22,16 @@ from app.licensing.protocol import STATUS_ACTIVE, STATUS_DEACTIVATED, STATUS_DIS
 
 _PLACEHOLDER = re.compile(r"\$(\d+)")
 
+# Step 6: datetimes are bound as fixed-width UTC text so that SQLite compares them chronologically (asyncpg binds real
+# timestamptz values on PostgreSQL).
+sqlite3.register_adapter(datetime, lambda d: (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+                         .strftime("%Y-%m-%d %H:%M:%S.%f"))
+
 
 class SqliteDb:
     """Async facade with asyncpg-style $n placeholders over an in-memory SQLite DB."""
+
+    dialect = "sqlite"
 
     def __init__(self) -> None:
         self.conn = sqlite3.connect(":memory:", check_same_thread=False)

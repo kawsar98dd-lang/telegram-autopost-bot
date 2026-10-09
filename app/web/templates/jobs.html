@@ -1,0 +1,15 @@
+{% extends "shell.html" %}
+{% block title %}Posting jobs · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Posting jobs</h1>
+{% if notice %}<p class="msg ok">{{ notice }}</p>{% endif %}
+<section class="card"><p class="muted">One job is one post for one group at one time. States: <strong>Queued</strong> (waiting for its time), <strong>Sending now</strong>, <strong>Waiting to retry</strong>, <strong>Posted</strong>, <strong>Failed</strong>, <strong>Cancelled</strong>. <strong>Uncertain</strong> means Telegram did not confirm; check the group before choosing. Failure reasons are shown in plain words; technical details are never displayed.</p></section>
+{% if jobs %}
+<section class="card">
+  <table>
+    <thead><tr><th>Post / group</th><th>Status</th><th>Scheduled for</th><th></th></tr></thead>
+    <tbody>{% include "partials/job_rows.html" %}</tbody>
+  </table>
+</section>
+{% else %}<section class="card"><p class="muted">No jobs yet.</p></section>{% endif %}
+{% endblock %}

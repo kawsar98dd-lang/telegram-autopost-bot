@@ -117,6 +117,21 @@ class FakeClient:
         chats = list(self.world.chats.get(int(self.session.split("|")[1]), []))
         return chats[:limit], len(chats) > limit
 
+    async def send_post(self, chat_id: int, text: str, image, image_name: str) -> list[int]:
+        """Records the send. ``world.send_script`` is a list of per-call behaviours: None = succeed, an Exception = raise it
+        BEFORE delivery, ("lost", exc) = deliver and THEN raise (the answer got lost: the message exists in the group)."""
+        self.world.calls.append(("send_post", str(chat_id)))
+        if self.session not in self.world.live:
+            raise SessionRevoked()
+        step = self.world.send_script.pop(0) if self.world.send_script else None
+        if isinstance(step, tuple) and step[0] == "lost":
+            self.world.sent.append((chat_id, text, image is not None, self.session))
+            raise step[1]
+        if step is not None:
+            raise step
+        self.world.sent.append((chat_id, text, image is not None, self.session))
+        return [len(self.world.sent) + 1000]
+
     async def log_out(self) -> None:
         self.world.calls.append(("log_out", ""))
         if self.session not in self.world.live:
@@ -138,6 +153,8 @@ class FakeTelegram:
     chats: dict[int, list[RawChat]] = field(default_factory=dict)  # tg_user_id -> dialogs of that account
     list_flood: int = 0
     list_error: Exception | None = None
+    send_script: list = field(default_factory=list)   # see FakeClient.send_post
+    sent: list = field(default_factory=list)          # (chat_id, text, has_image, session) of every delivered message
 
     def add_account(self, phone: str, tg_user_id: int, **kw) -> FakeAccount:
         self.accounts[phone] = FakeAccount(tg_user_id, **kw)

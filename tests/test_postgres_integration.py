@@ -43,7 +43,7 @@ class PostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_migrations_apply_once(self):
         from app.db.migrate import ensure_schema
 
-        self.assertEqual(self.first_run, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups", "0005_posts"])
+        self.assertEqual(self.first_run, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups", "0005_posts", "0006_scheduler"])
         self.assertEqual(await ensure_schema(URL), [])
 
     async def test_skip_locked_queue_claim_and_isolation_constraints(self):

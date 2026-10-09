@@ -1,0 +1,71 @@
+{% extends "shell.html" %}
+{% block title %}Schedule · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Schedule a post</h1>
+{% if errors %}<ul class="msg bad">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<section class="card">
+  <h2>{{ post.title or 'Draft' }}</h2>
+  <p class="muted">A saved draft is only text until you schedule it. A separate worker sends it at the chosen time through your Telegram account. This page never sends anything.</p>
+  {% if post.media %}<p><img class="thumb" src="/posts/{{ post.id }}/image" alt="Post image"></p>{% endif %}
+  <p class="muted">{{ 'Photo caption' if message.kind == 'caption' else 'Text message' }} &middot; {{ message.units }} of {{ message.limit }} characters (footer included). This is exactly what will be sent:</p>
+  <pre class="message-box">{{ message.text }}</pre>
+</section>
+{% if review %}
+<section class="card">
+  <h2>Please review</h2>
+  <p><strong>{{ review.describe }}</strong></p>
+  <p class="muted">Next runs (shown in {{ review.spec.timezone }} and in UTC):</p>
+  <ul>{% for r in review.runs %}<li>{{ r|localtime(review.spec.timezone) }} &middot; {{ r|utc }}</li>{% endfor %}</ul>
+  <p class="muted">{{ review.chosen|length }} target group{{ '' if review.chosen|length == 1 else 's' }}: {% for g in review.chosen %}{{ g.title }}{{ ', ' if not loop.last }}{% endfor %}</p>
+  <p class="msg warn">Nothing is saved yet. Press <strong>Save schedule</strong> below to confirm.</p>
+</section>
+{% endif %}
+<form method="post" action="/schedules/new/{{ post.id }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <section class="card">
+    <h2>Target groups</h2>
+    {% if stale %}<p class="msg warn">{{ stale }} group{{ '' if stale == 1 else 's' }} of this draft can no longer be posted to and {{ 'is' if stale == 1 else 'are' }} not listed. Refresh the groups and edit the draft.</p>{% endif %}
+    {% if not targets %}<p class="muted">This draft has no postable target group. <a href="/posts/{{ post.id }}">Edit the draft</a>.</p>{% endif %}
+    {% for g in targets %}
+      <p><label class="check"><input type="checkbox" name="sel_{{ g.id }}" value="1" {{ 'checked' if g.id|lower in chosen else '' }}> <strong>{{ g.title }}</strong></label></p>
+    {% endfor %}
+    <p class="hint">Posting rights are checked again by the worker right before every send.</p>
+  </section>
+  <section class="card">
+    <h2>When</h2>
+    <label>Type
+      <select name="kind">
+        <option value="once" {{ 'selected' if values.kind == 'once' }}>One time</option>
+        <option value="daily" {{ 'selected' if values.kind == 'daily' }}>Every day</option>
+        <option value="weekly" {{ 'selected' if values.kind == 'weekly' }}>Selected weekdays</option>
+        <option value="custom" {{ 'selected' if values.kind == 'custom' }}>Custom: every N minutes / hours / days</option>
+      </select></label>
+    <label>Timezone (IANA name, for example Asia/Dhaka)
+      <input type="text" name="timezone" value="{{ values.timezone }}" list="tz-list" autocomplete="off" maxlength="64"></label>
+    <datalist id="tz-list">{% for z in timezones %}<option value="{{ z }}">{% endfor %}</datalist>
+    <p class="hint">Times below are in this timezone, not in the server's timezone.</p>
+
+    <h3>One time</h3>
+    <label>Date and time <input type="datetime-local" name="once_at" value="{{ values.once_at }}"></label>
+
+    <h3>Every day / selected weekdays</h3>
+    <label>Times of day, 24-hour HH:MM, separated by commas (for example 09:00, 18:30)
+      <input type="text" name="times" value="{{ values.times }}" maxlength="200"></label>
+    <p class="hint">Weekdays (only for "Selected weekdays"):</p>
+    <p>{% for name in weekday_names %}<label class="check"><input type="checkbox" name="wd_{{ loop.index0 }}" value="1" {{ 'checked' if loop.index0|string in values.weekdays }}> {{ name[:3] }}</label> {% endfor %}</p>
+
+    <h3>Custom interval</h3>
+    <p class="hint">The first run is the start time, then every N minutes of elapsed time (at least {{ min_interval }} minutes), until the optional end time. No expressions are accepted.</p>
+    <label>Every <input type="text" name="every" value="{{ values.every }}" inputmode="numeric" maxlength="6"></label>
+    <label>Unit
+      <select name="unit">
+        {% for u in ('minutes', 'hours', 'days') %}<option value="{{ u }}" {{ 'selected' if values.unit == u }}>{{ u }}</option>{% endfor %}
+      </select></label>
+    <label>Start (date and time) <input type="datetime-local" name="starts" value="{{ values.starts }}"></label>
+    <label>End (optional) <input type="datetime-local" name="ends" value="{{ values.ends }}"></label>
+  </section>
+  <button class="btn secondary" type="submit" name="action" value="review">Review</button>
+  {% if review %}<button class="btn" type="submit" name="action" value="save">Save schedule</button>{% endif %}
+  <a href="/posts/{{ post.id }}">Back to the draft</a>
+</form>
+{% endblock %}

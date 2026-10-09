@@ -1,0 +1,35 @@
+{% extends "shell.html" %}
+{% block title %}Schedule · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ s.title or 'Schedule' }}</h1>
+{% if notice %}<p class="msg ok">{{ notice }}</p>{% endif %}
+<section class="card">
+  <p><span class="badge {{ s.tone }}">{{ s.state }}</span></p>
+  <dl class="facts">
+    <dt>When</dt><dd>{{ s.describe }}{% if s.kind == 'once' and s.run_at %}: {{ s.run_at|localtime(s.timezone) }}{% endif %}</dd>
+    <dt>Timezone</dt><dd>{{ s.timezone }}</dd>
+    <dt>Next run</dt><dd>{{ s.next_run_at|localtime(s.timezone) if s.next_run_at else '-' }}</dd>
+    <dt>Last run</dt><dd>{{ s.last_run_at|localtime(s.timezone) if s.last_run_at else '-' }}</dd>
+    <dt>Groups</dt><dd>{% for g in s.targets %}{{ g.title }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+  </dl>
+  {% if s.status == 'active' %}
+    <form method="post" action="/schedules/{{ s.id }}/pause" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Pause</button></form>
+  {% elif s.status == 'paused' %}
+    <form method="post" action="/schedules/{{ s.id }}/resume" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Resume</button></form>
+  {% endif %}
+  {% if s.status in ('active', 'paused') or s.jobs|selectattr('status', 'in', ['scheduled', 'waiting'])|list %}
+    <form method="post" action="/schedules/{{ s.id }}/cancel" class="inline" data-confirm="Cancel this schedule and every job that has not started sending?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Cancel</button></form>
+  {% endif %}
+  <p class="hint">Pausing stops everything that has not started sending, including queued jobs. Cancelling cannot be undone. A post that is already being sent cannot be recalled.</p>
+</section>
+<section class="card">
+  <h2>Recent jobs</h2>
+  {% if s.jobs %}<table><thead><tr><th>Post / group</th><th>Status</th><th>Scheduled for</th><th></th></tr></thead><tbody>{% with jobs = s.jobs %}{% include "partials/job_rows.html" %}{% endwith %}</tbody></table>
+  {% else %}<p class="muted">No job has been created yet.</p>{% endif %}
+</section>
+{% if s.events %}
+<section class="card"><h2>History</h2>
+  <ul>{% for e in s.events %}<li><span class="muted">{{ e.created_at|utc }}</span> &middot; {{ e.message }}</li>{% endfor %}</ul>
+</section>{% endif %}
+<a href="/schedules">Back to schedules</a>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "shell.html" %}
+{% block title %}Schedules · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Schedules</h1>
+{% if notice %}<p class="msg ok">{{ notice }}</p>{% endif %}
+<section class="card">
+  <p class="muted">A <strong>draft</strong> is a saved post. A <strong>schedule</strong> says when it is sent. For every run the worker creates one <strong>job</strong> per group; see <a href="/jobs">Posting jobs</a>.</p>
+  <a class="btn" href="/posts">Choose a draft to schedule</a>
+</section>
+{% if schedules %}
+<section class="card">
+  <table>
+    <thead><tr><th>Post</th><th>Status</th><th>Next run</th><th>Jobs</th></tr></thead>
+    <tbody>
+    {% for s in schedules %}
+      <tr>
+        <td><a href="/schedules/{{ s.id }}"><strong>{{ s.title or (s.body[:50] if s.body else 'Image post') }}</strong></a><br>
+            <span class="muted">{{ s.kind }} &middot; {{ s.targets }} group{{ '' if s.targets == 1 else 's' }}</span></td>
+        <td><span class="badge {{ s.tone }}">{{ s.state }}</span></td>
+        <td>{{ s.next_run_at|localtime(s.timezone) if s.next_run_at else '-' }}</td>
+        <td>{{ s.pending }} queued &middot; {{ s.posted }} posted &middot; {{ s.failed }} failed</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="card"><p class="muted">No schedules yet. Open a draft and press <strong>Schedule</strong>.</p></section>
+{% endif %}
+{% endblock %}

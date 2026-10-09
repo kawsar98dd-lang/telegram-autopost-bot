@@ -16,11 +16,13 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Protocol
 
 from .. import __version__
-from .errors import NetworkProblem, SessionRevoked, TelegramError, map_telethon_exception
+from .errors import (DeliveryUncertain, FloodWait, GroupUnavailable, NetworkProblem, SessionRevoked, TelegramError,
+                     map_send_exception, map_telethon_exception)
 from .groups import MAX_DIALOGS, RawChat, raw_chat_from_entity
 
 log = logging.getLogger(__name__)
 OPERATION_TIMEOUT = 40.0
+SEND_TIMEOUT = 90.0  # one message / photo upload; on expiry the outcome is UNCERTAIN (see PostingSession.send)
 
 _PHONE = re.compile(r"^\+[1-9]\d{7,14}$")
 
@@ -69,6 +71,7 @@ class ClientAdapter(Protocol):
     async def current_profile(self) -> TelegramProfile | None: ...
     async def log_out(self) -> None: ...
     async def list_groups(self, limit: int) -> tuple[list[RawChat], bool]: ...
+    async def send_post(self, chat_id: int, text: str, image: bytes | None, image_name: str) -> list[int]: ...
     def export_session(self) -> str: ...
 
 
@@ -134,8 +137,63 @@ class TelethonAdapter:
             chats.append(raw_chat_from_entity(dialog.entity, int(dialog.id)))
         return chats[:limit], len(chats) > limit
 
+    async def send_post(self, chat_id: int, text: str, image: bytes | None, image_name: str) -> list[int]:
+        """Send ONE plain-text message (or one photo with a caption) to a chat of this account (Step 6).
+
+        The chat is resolved from the entity cache that list_groups() filled in the same connection. Failures before the
+        request is sent raise definitive errors; once the request is on its way, errors are classified by the caller
+        (PostingSession.send). No parse mode: nothing in the text is interpreted as markup.
+        """
+        import io
+
+        try:
+            peer = await self._client.get_input_entity(chat_id)
+        except Exception as exc:  # noqa: BLE001 - resolution happens BEFORE anything is sent
+            mapped = map_telethon_exception(exc)
+            if isinstance(mapped, (FloodWait, SessionRevoked, NetworkProblem)):
+                raise mapped from None
+            raise GroupUnavailable() from None
+        if image is None:
+            sent = await self._client.send_message(peer, text, parse_mode=None)
+        else:
+            buffer = io.BytesIO(image)
+            buffer.name = image_name
+            sent = await self._client.send_file(peer, buffer, caption=text, parse_mode=None, force_document=False)
+        return [int(m.id) for m in (sent if isinstance(sent, list) else [sent])]
+
     def export_session(self) -> str:
         return self._client.session.save()
+
+
+class PostingSession:
+    """What the posting worker may do with one connected account, and nothing else: read the group list, send a post."""
+
+    def __init__(self, client: ClientAdapter, timeout: float) -> None:
+        self._client, self._timeout = client, timeout
+
+    async def fresh_groups(self, limit: int = MAX_DIALOGS) -> list[RawChat]:
+        """Current dialogs of the account (read-only). Needed to re-check posting rights right before sending."""
+        try:
+            chats, _ = await asyncio.wait_for(self._client.list_groups(limit), max(self._timeout, 120.0))
+            return chats
+        except TelegramError:
+            raise
+        except asyncio.TimeoutError:
+            raise NetworkProblem() from None
+        except Exception as exc:
+            raise map_telethon_exception(exc) from None
+
+    async def send(self, chat_id: int, text: str, image: bytes | None, image_name: str = "image.jpg") -> list[int]:
+        """Send one post. Raises a definitive TelegramError when Telegram ANSWERED with a refusal, DeliveryUncertain when
+        the connection failed or timed out after the request may have left (the message may exist in the group)."""
+        try:
+            return await asyncio.wait_for(self._client.send_post(chat_id, text, image, image_name), SEND_TIMEOUT)
+        except TelegramError:
+            raise
+        except asyncio.TimeoutError:
+            raise DeliveryUncertain() from None
+        except Exception as exc:
+            raise map_send_exception(exc) from None
 
 
 def _default_factory(api_id: int, api_hash: str, session: str) -> ClientAdapter:
@@ -217,3 +275,9 @@ class TelegramClientService:
         """Read-only listing of the account's group chats. Never sends, joins or changes anything."""
         async with self._open(api_id, api_hash, session) as client:
             return await self._run(client.list_groups(limit), timeout=max(self._timeout, 120.0))
+
+    @contextlib.asynccontextmanager
+    async def posting_session(self, api_id: int, api_hash: str, session: str):
+        """Open ONE connection for a batch of sends to one account (always disconnects again). Step 6 worker only."""
+        async with self._open(api_id, api_hash, session) as client:
+            yield PostingSession(client, self._timeout)

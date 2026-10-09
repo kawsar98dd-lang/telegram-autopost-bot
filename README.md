@@ -3,7 +3,7 @@
 Schedules marketing posts to Telegram groups **through your own Telegram user account (MTProto)**.
 It does not use the Telegram Bot API and never needs a bot in your groups.
 
-> **Status: Step 5 of the build - post drafts, image and footer (Steps 3-4: Telegram connection and groups).** Telegram login, group discovery, the post
+> **Status: Step 6 of the build - scheduler and background worker (Step 5: drafts, Steps 3-4: Telegram connection and groups).** Telegram login, group discovery, the post
 > composer and the actual posting engine are added in the next steps. This README grows with them.
 
 ## What exists in this step
@@ -75,6 +75,10 @@ and the manual verification steps). Posting and scheduling come in later steps.
 ## Posts (Step 5)
 
 Drafts with text, one image and target groups, previewed with the mandatory footer; nothing is sent yet. See [docs/STEP5_POSTS.md](docs/STEP5_POSTS.md).
+
+## Scheduler and worker (Step 6)
+
+Schedules (one-time, daily, weekly, custom) and a separate worker that sends posts through your own Telegram account. See **[docs/STEP6_SCHEDULER.md](docs/STEP6_SCHEDULER.md)** (architecture, job states, retry and FloodWait policy, duplicate prevention and its limits, deployment, verification). The web service alone never sends; the worker service must run.
 
 ## Run the tests
 

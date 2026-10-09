@@ -21,6 +21,7 @@ from ..telegram.connect import TelegramConnectionService
 from ..telegram.group_sync import GroupService
 from ..posts.service import PostService
 from ..posts.storage import make_storage
+from ..scheduler.service import ScheduleService
 from ..telegram.service import TelegramClientService
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -44,9 +45,25 @@ def _fmt_time(value: Any) -> str:
         return "-"
 
 
+def _fmt_local(value: Any, tz_name: str) -> str:
+    """An instant shown in the schedule's own timezone, e.g. '2026-10-10 09:00 (Asia/Dhaka)'."""
+    from zoneinfo import ZoneInfo
+
+    from ..scheduler.timeutil import to_dt
+
+    try:
+        moment = to_dt(value)
+        if moment is None:
+            return "-"
+        return moment.astimezone(ZoneInfo(tz_name)).strftime("%Y-%m-%d %H:%M") + f" ({tz_name})"
+    except Exception:  # noqa: BLE001 - a display helper never breaks a page
+        return _fmt_time(value)
+
+
 def make_template_env() -> Environment:
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=select_autoescape(["html"]))
     env.filters["utc"] = _fmt_time
+    env.filters["localtime"] = _fmt_local
     env.globals.update(app_name=branding.APP_NAME, app_description=branding.APP_DESCRIPTION,
                        support_url=branding.SUPPORT_URL)
     return env
@@ -63,6 +80,7 @@ class AppContext:
     telegram_connect: TelegramConnectionService
     groups: GroupService
     posts: PostService
+    schedules: ScheduleService
     clock: Callable[[], float] = time.time
     templates: Environment = field(default_factory=make_template_env)
 
@@ -80,9 +98,10 @@ def build_context(settings: Settings, db: Any, manager: LicenseManager, *, ciphe
     cipher = cipher or Cipher(settings.session_encryption_key)
     telegram = telegram or TelegramClientService()
     connect = TelegramConnectionService(db, cipher, telegram, settings, clock)
+    posts = PostService(db, connect, make_storage(settings, db, clock), settings, clock)
     return AppContext(
         settings=settings, db=db, license=manager, users=UserService(db),
         sessions=SessionService(db, clock, settings.session_idle_minutes * 60, settings.session_max_hours * 3600),
         limiter=RateLimiter(db), telegram_connect=connect, groups=GroupService(db, connect, telegram, clock),
-        posts=PostService(db, connect, make_storage(settings, db, clock), settings, clock), clock=clock,
+        posts=posts, schedules=ScheduleService(db, posts, clock), clock=clock,
     )
