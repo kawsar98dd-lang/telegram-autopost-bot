@@ -41,6 +41,34 @@ def touch_heartbeat(path: str = HEARTBEAT_FILE) -> None:
         log.warning("cannot write heartbeat file")
 
 
+class CycleState:
+    """What the loop remembers between cycles (log de-duplication and the recovery timer)."""
+
+    def __init__(self) -> None:
+        self.license_state = None
+        self.last_recovery: float | None = None  # None = never: the very first cycle always recovers stale jobs
+
+
+async def work_cycle(manager, queue, executor, stop: asyncio.Event, state: CycleState, *,
+                     monotonic=time.monotonic) -> bool:
+    """One pass of the worker. Without a valid license NOTHING is recovered, created or sent (returns False)."""
+    status = await manager.ensure_fresh()
+    if status.state != state.license_state:
+        log.info("license state: %s %s", status.state.value, status.detail)
+        state.license_state = status.state
+    if not status.enabled:
+        return False
+    if state.last_recovery is None or monotonic() - state.last_recovery >= policy.STALE_RECOVERY_SECONDS:
+        recovered = await queue.recover_stale()
+        if any(recovered.values()):
+            log.warning("recovered stale jobs: %s", recovered)
+        state.last_recovery = monotonic()
+    await queue.materialize_due()
+    while not stop.is_set() and await executor.run_once():  # drains everything that is due, account by account
+        touch_heartbeat()
+    return True
+
+
 async def run() -> int:
     try:
         settings = load_settings()
@@ -77,24 +105,11 @@ async def run() -> int:
                            worker_id=worker_id, stop=stop)
 
     log.info("worker started (id=%s)", worker_id)
-    last_state = None
-    last_recovery = 0.0
+    state = CycleState()
     while not stop.is_set():
         touch_heartbeat()
         try:
-            status = await manager.ensure_fresh()
-            if status.state != last_state:
-                log.info("license state: %s %s", status.state.value, status.detail)
-                last_state = status.state
-            if status.enabled:
-                if time.monotonic() - last_recovery >= policy.STALE_RECOVERY_SECONDS:
-                    recovered = await queue.recover_stale()
-                    if any(recovered.values()):
-                        log.warning("recovered stale jobs: %s", recovered)
-                    last_recovery = time.monotonic()
-                await queue.materialize_due()
-                while not stop.is_set() and await executor.run_once():  # drains everything that is due, account by account
-                    touch_heartbeat()
+            await work_cycle(manager, queue, executor, stop, state)
         except Exception:
             log.exception("worker iteration failed")  # secrets are redacted by the log formatter
         try:

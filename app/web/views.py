@@ -39,7 +39,7 @@ def render(request: Request, template: str, status: int = 200, **values) -> Resp
 def license_view(request: Request) -> dict:
     summary = request.ctx.license.summary()
     label, tone = STATE_LABELS.get(summary.state.value, ("Unknown", "bad"))
-    return {"summary": summary, "label": label, "tone": tone}
+    return {"summary": summary, "label": label, "tone": tone, "offline": bool(getattr(request.ctx.license, "offline", False))}
 
 
 async def start_session(request: Request, response: Response, user_id: str) -> None:

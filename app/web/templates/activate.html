@@ -4,6 +4,12 @@
 <h1>License</h1>
 {% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
 {% include "partials/license_card.html" %}
+{% if lic.offline %}
+<section class="card">
+  <h2>Install or replace your license file</h2>
+  <p class="muted">This product uses a signed license file; no internet connection and no license server are needed. Put the file you received at the path set in <code>LICENSE_FILE</code> (default <code>data/license.json</code>), or paste its content into <code>LICENSE_FILE_CONTENT</code>, and reload this page. A replaced file is picked up within about a minute without a restart.</p>
+</section>
+{% else %}
 <section class="card">
   <h2>{{ 'Activate a different license' if lic.summary.enabled else 'Activate your license' }}</h2>
   <p class="muted">Enter the license key you received when you bought this software. Activation needs an internet connection to the license server.</p>
@@ -13,4 +19,5 @@
     <button class="btn" type="submit">Activate</button>
   </form>
 </section>
+{% endif %}
 {% endblock %}

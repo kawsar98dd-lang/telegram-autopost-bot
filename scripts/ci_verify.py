@@ -41,6 +41,13 @@ REQUIRED_EXECUTED = {
     "tests.test_web_schedules.": 11,
     "tests.test_recurrence.": 19,
     "tests.test_scheduler_policy.": 7,
+    # Offline signed licensing and the customer release builder
+    "tests.test_offline_license.": 43,
+    "tests.test_customer_release.": 7,
+    "tests.test_licensing_docs.": 5,
+    # Production setup lock and worker enforcement
+    "tests.test_setup_lock.": 12,
+    "tests.test_worker_cycle.": 8,
 }
 REQUIRE_FLAGS = ("REQUIRE_POSTGRES_TESTS", "REQUIRE_FASTAPI_TESTS", "REQUIRE_VENDORED_HTMX")
 

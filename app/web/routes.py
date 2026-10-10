@@ -31,6 +31,7 @@ ACTIVATION_ERRORS = {
     "disabled": (403, "This license has been disabled."),
     "unreachable": (503, "The license server could not be reached. Check the internet connection and try again."),
     "invalid_response": (502, "The license server's answer could not be verified. Please try again later."),
+    "offline_mode": (400, "This installation uses a license file. Place the file as described below; there is nothing to enter here."),
     "not_configured": (503, "This build has no license server configured. Please contact the seller."),
 }
 _DEFAULT_ACTIVATION_ERROR = (400, "The license could not be activated.")
@@ -39,13 +40,21 @@ _dummy_hash: str | None = None
 
 
 # ---- first-run setup ---------------------------------------------------------------------------
+def _setup_locked_page(request: Request) -> Response:
+    return render(request, "setup_locked.html", 403)
+
+
 async def setup_get(request: Request) -> Response:
+    if request.ctx.settings.setup_locked:
+        return _setup_locked_page(request)
     return render(request, "setup.html", token_required=bool(request.ctx.settings.setup_token),
                   errors=[], email="", display_name="")
 
 
 async def setup_post(request: Request) -> Response:
     ctx = request.ctx
+    if ctx.settings.setup_locked:  # nothing is evaluated, nothing is written, no matter what the form contains
+        return _setup_locked_page(request)
     key = f"setup:{key_part(request.client_ip)}"
     retry = await limit_check(request, key, SETUP_LIMIT)
     if retry:

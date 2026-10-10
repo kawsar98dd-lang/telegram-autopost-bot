@@ -1,3 +1,7 @@
+> **Default product mode is OFFLINE** (signed license file, no server): see `docs/LICENSING.md` and
+> `license_server/issue_license.py`. The online protocol below is optional and only used if a build is packaged with a license
+> server URL (`keygen.py --server-url`). No server implementation is part of this repository.
+
 # License protocol v1 (seller reference)
 
 Client (customer installation) → `POST {LICENSE_SERVER_URL}/v1/activate` and `/v1/verify`

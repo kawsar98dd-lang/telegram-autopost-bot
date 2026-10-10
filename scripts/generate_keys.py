@@ -22,6 +22,7 @@ def new_values() -> dict[str, str]:
     return {
         "APP_SECRET": secrets.token_urlsafe(48),
         "SESSION_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "SETUP_TOKEN": secrets.token_urlsafe(24),
         "POSTGRES_PASSWORD": "".join(secrets.choice(alnum) for _ in range(32)),
     }
 

@@ -1,0 +1,13 @@
+{% extends "public.html" %}
+{% block title %}Setup locked · {{ app_name }}{% endblock %}
+{% block content %}
+<h2>Setup is locked</h2>
+<p class="msg warn">This installation runs in production mode and has no valid <code>SETUP_TOKEN</code>, so nobody can create the administrator account yet. This protects a fresh installation from being claimed by a stranger.</p>
+<p>The owner of this installation must:</p>
+<ol>
+  <li>Run <code>python scripts/generate_keys.py</code> (or invent a long random value of at least 16 characters).</li>
+  <li>Put it into <code>.env</code> (or the hosting dashboard) as <code>SETUP_TOKEN=...</code> and restart the web service.</li>
+  <li>Open this page again and enter the same token together with the administrator details.</li>
+</ol>
+<p class="hint">After the administrator exists, this page disappears and the token is no longer needed.</p>
+{% endblock %}

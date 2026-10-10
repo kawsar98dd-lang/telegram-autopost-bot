@@ -26,15 +26,18 @@ class LogCapture:
         return "\n".join(fmt.format(r) for r in self.records)
 
 
+SETUP_TOKEN = "unit-test-setup-token-0123456789"   # production now REQUIRES one (see tests/test_setup_lock.py)
+
+
 class FirstRunSetupTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.env = await Env().start()
+        self.env = await Env().start(env_overrides={"SETUP_TOKEN": SETUP_TOKEN})
         self.c = self.env.client()
 
     async def submit(self, client=None, **override):
         client = client or self.c
         token = await client.token_from("/setup")
-        form = {"csrf_token": token, "email": "Owner@Example.com", "display_name": "Owner",
+        form = {"csrf_token": token, "setup_token": SETUP_TOKEN, "email": "Owner@Example.com", "display_name": "Owner",
                 "password": PASSWORD, "password_confirm": PASSWORD, **override}
         return await client.post("/setup", form)
 
@@ -48,7 +51,7 @@ class FirstRunSetupTests(unittest.IsolatedAsyncioTestCase):
         page = await self.c.get("/setup")
         self.assertEqual(page.status, 200)
         self.assertIn("Create administrator", page.body)
-        self.assertNotIn("setup_token", page.body)  # no token configured
+        self.assertIn("setup_token", page.body)  # production always asks for the token
 
     async def test_admin_creation_success(self):
         r = await self.submit()
@@ -97,7 +100,7 @@ class FirstRunSetupTests(unittest.IsolatedAsyncioTestCase):
         tokens = [await c.token_from("/setup") for c in clients]
 
         def post(i):
-            return clients[i].post("/setup", {"csrf_token": tokens[i], "email": f"admin{i}@example.com",
+            return clients[i].post("/setup", {"csrf_token": tokens[i], "setup_token": SETUP_TOKEN, "email": f"admin{i}@example.com",
                                               "password": PASSWORD, "password_confirm": PASSWORD})
 
         replies = await asyncio.gather(*[post(i) for i in range(4)])

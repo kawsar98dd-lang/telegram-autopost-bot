@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .security.crypto import CryptoError, parse_keys
 
+SETUP_TOKEN_MIN_LENGTH = 16  # production: a first-run setup token shorter than this is refused
 _PLACEHOLDERS = {"", "change-me", "changeme", "secret", "password", "your-secret-here"}
 
 
@@ -85,6 +86,9 @@ class Settings:
     session_max_hours: int
     trust_proxy_headers: bool
     setup_token: str
+    # Offline signed license (see docs/LICENSING.md). The file wins nothing over inline content: inline is used if set.
+    license_file: str = "./data/license.json"
+    license_file_content: str = ""
 
     @property
     def is_production(self) -> bool:
@@ -93,6 +97,12 @@ class Settings:
     @property
     def app_host(self) -> str:
         return urlsplit(self.app_url).netloc.lower()
+
+    @property
+    def setup_locked(self) -> bool:
+        """Production never offers the first-run page without a proper SETUP_TOKEN: otherwise the first visitor from the
+        internet could create the administrator account of a fresh installation. Development may run without a token."""
+        return self.is_production and len(self.setup_token) < SETUP_TOKEN_MIN_LENGTH
 
     @property
     def cookie_secure(self) -> bool:
@@ -187,10 +197,17 @@ def settings_from_env(env: Mapping[str, str]) -> Settings:
     enforcement = _to_bool(g("LICENSE_ENFORCEMENT"), True)
     if not enforcement and app_env == "production":
         problems.append("LICENSE_ENFORCEMENT can only be turned off when APP_ENV=development")
+    token = g("SETUP_TOKEN")
+    if token and app_env == "production" and (len(token) < SETUP_TOKEN_MIN_LENGTH or token.lower() in _PLACEHOLDERS
+                                              or token.lower().startswith(("change", "replace"))):
+        problems.append(f"SETUP_TOKEN must be a random value of at least {SETUP_TOKEN_MIN_LENGTH} characters in production "
+                        "(run: python scripts/generate_keys.py)")
     override = g("LICENSE_SERVER_URL_OVERRIDE")
     if override and app_env == "production":
         problems.append("LICENSE_SERVER_URL_OVERRIDE is only allowed when APP_ENV=development")
 
+    if len(g("LICENSE_FILE_CONTENT")) > 16384:
+        problems.append("LICENSE_FILE_CONTENT is too long for a license (at most 16384 characters)")
     media_storage = g("MEDIA_STORAGE", "database").lower()
     if media_storage not in ("database", "local"):
         problems.append("MEDIA_STORAGE must be 'database' or 'local'")
@@ -218,6 +235,8 @@ def settings_from_env(env: Mapping[str, str]) -> Settings:
         session_max_hours=_to_int(env, "SESSION_MAX_HOURS", 168, 1, 720, problems),
         trust_proxy_headers=_to_bool(g("TRUST_PROXY_HEADERS"), False),
         setup_token=g("SETUP_TOKEN"),
+        license_file=g("LICENSE_FILE", "./data/license.json") or "./data/license.json",
+        license_file_content=g("LICENSE_FILE_CONTENT"),
     )
     if problems:
         raise ConfigError(problems)

@@ -47,3 +47,24 @@ def sign_payload(private_b64url: str, payload: dict[str, Any]) -> dict[str, Any]
 def generate_license_key() -> str:
     body = "".join(secrets.choice(_KEY_ALPHABET) for _ in range(20))
     return "TAP-" + "-".join(body[i : i + 5] for i in range(0, 20, 5))
+
+
+OFFLINE_TYPE = "offline_license"   # MUST equal app/licensing/offline.py LICENSE_TYPE_MARK (a test enforces this)
+OFFLINE_FORMAT_VERSION = 1
+
+
+def build_offline_payload(*, license_id: str, product: str, customer_ref: str, license_type: str, issued_at: int,
+                          expires_at: int | None, host: str = "") -> dict[str, Any]:
+    """Payload of an offline license file. ``expires_at=None`` means an explicitly PERPETUAL license."""
+    payload: dict[str, Any] = {
+        "type": OFFLINE_TYPE, "v": OFFLINE_FORMAT_VERSION, "license_id": license_id, "product": product,
+        "customer_ref": customer_ref, "license_type": license_type, "issued_at": issued_at,
+        "perpetual": expires_at is None, "expires_at": expires_at,
+    }
+    if host:
+        payload["host"] = host.lower()
+    return payload
+
+
+def new_license_id() -> str:
+    return "LIC-" + "".join(secrets.choice(_KEY_ALPHABET) for _ in range(12))
