@@ -20,9 +20,10 @@ except ImportError:  # pragma: no cover - depends on the environment
     HAVE_FASTAPI = False
 
 BASE = "https://poster.example.com"
+SETUP_TOKEN = "smoke-test-setup-token-0123456789"
 
 
-def build(**env_kwargs):
+def build(**env_kwargs):  # env_overrides=..., activated=..., with_admin=... are passed to tests.web_support.Env.start
     env = asyncio.run(Env().start(**env_kwargs))
     from app.web.main import create_app
 
@@ -122,16 +123,36 @@ class FastApiSmokeTests(unittest.TestCase):
             self.assertEqual(r.status_code, 503)
 
     def test_first_run_setup_flow_through_real_fastapi(self):
-        env, app = build()
+        # Production now REQUIRES a SETUP_TOKEN for the first-run page (see test_first_run_setup_is_locked_without_a_token_...).
+        env, app = build(env_overrides={"SETUP_TOKEN": SETUP_TOKEN})
         with TestClient(app, base_url=BASE, follow_redirects=False) as client:
             self.assertEqual(client.get("/login").headers["location"], "/setup")
             page = client.get("/setup")
             self.assertEqual(page.status_code, 200)
+            self.assertIn('name="setup_token"', page.text)
             token = re.search(r'name="csrf-token" content="([^"]+)"', page.text).group(1)
-            r = client.post("/setup", data={"csrf_token": token, "email": "owner@example.com",
-                                            "password": PASSWORD, "password_confirm": PASSWORD})
+            form = {"csrf_token": token, "email": "owner@example.com", "password": PASSWORD, "password_confirm": PASSWORD}
+            wrong = client.post("/setup", data={**form, "setup_token": "not-the-token"})
+            self.assertEqual(wrong.status_code, 400)                       # a wrong token creates nothing
+            self.assertEqual(client.get("/login").headers["location"], "/setup")
+            r = client.post("/setup", data={**form, "setup_token": SETUP_TOKEN})
             self.assertEqual(r.status_code, 303)
             self.assertEqual(client.get("/setup").status_code, 404)
+
+    def test_first_run_setup_is_locked_without_a_token_through_real_fastapi(self):
+        env, app = build()                                                   # production, no SETUP_TOKEN
+        with TestClient(app, base_url=BASE, follow_redirects=False) as client:
+            self.assertEqual(client.get("/login").headers["location"], "/setup")
+            page = client.get("/setup")
+            self.assertEqual(page.status_code, 403)
+            self.assertIn("Setup is locked", page.text)
+            self.assertNotIn('name="password"', page.text)
+            token = re.search(r'name="csrf-token" content="([^"]+)"', page.text).group(1)
+            for extra in ({}, {"setup_token": ""}, {"setup_token": SETUP_TOKEN}):
+                r = client.post("/setup", data={"csrf_token": token, "email": "attacker@example.com", "password": PASSWORD,
+                                                "password_confirm": PASSWORD, **extra})
+                self.assertEqual(r.status_code, 403, extra)
+            self.assertEqual(client.get("/login").headers["location"], "/setup")   # still no administrator
 
 
 if __name__ == "__main__":

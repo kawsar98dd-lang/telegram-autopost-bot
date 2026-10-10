@@ -1,5 +1,10 @@
 # Changelog
 
+## Production setup lock
+* Production never offers the first-run page without a `SETUP_TOKEN` of at least 16 characters (locked page, HTTP 403, nothing written); short/placeholder tokens are refused by configuration. `generate_keys.py` creates one.
+* Worker loop body extracted (`work_cycle`) so license enforcement is testable; the first stale-job recovery no longer waits after a fresh boot.
+* Real-FastAPI smoke tests updated for the token requirement (`test_first_run_setup_flow_through_real_fastapi`) and a locked-setup smoke test added; CI now requires 8 smoke tests.
+
 ## Offline signed licensing
 * New `app/licensing/offline.py` (Ed25519 license file, public key only), selected by `app/licensing/setup.py`; fixes the production start-up blocker (empty license server URL/public key made every production start fail). Production still enforces; a build without a valid public key refuses to start with an actionable message.
 * Settings `LICENSE_FILE`, `LICENSE_FILE_CONTENT`; `/activate` explains where to put the file.
