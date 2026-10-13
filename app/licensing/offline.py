@@ -119,6 +119,8 @@ def verify_license_text(text: str, *, public_key: str, product: str, host: str, 
         expires_at = _int(expires)
         if expires_at is None or expires_at <= issued:
             raise bad("The license data is inconsistent (missing or invalid expiry).")
+    if ltype == "trial" and perpetual:
+        raise bad("The license data is inconsistent (a trial license must have an expiry).")
     bound = payload.get("host", "")
     if not isinstance(bound, str):
         raise bad("The license data is malformed.")

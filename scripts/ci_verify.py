@@ -48,6 +48,10 @@ REQUIRED_EXECUTED = {
     # Production setup lock and worker enforcement
     "tests.test_setup_lock.": 12,
     "tests.test_worker_cycle.": 8,
+    # Commercial release preparation
+    "tests.test_footer_branding.": 9,
+    "tests.test_single_host_launcher.": 10,
+    "tests.test_release_hardening.": 13,
 }
 REQUIRE_FLAGS = ("REQUIRE_POSTGRES_TESTS", "REQUIRE_FASTAPI_TESTS", "REQUIRE_VENDORED_HTMX")
 

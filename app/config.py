@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from .licensing import constants as license_constants
 from .security.crypto import CryptoError, parse_keys
 
 SETUP_TOKEN_MIN_LENGTH = 16  # production: a first-run setup token shorter than this is refused
@@ -102,7 +103,7 @@ class Settings:
     def setup_locked(self) -> bool:
         """Production never offers the first-run page without a proper SETUP_TOKEN: otherwise the first visitor from the
         internet could create the administrator account of a fresh installation. Development may run without a token."""
-        return self.is_production and len(self.setup_token) < SETUP_TOKEN_MIN_LENGTH
+        return (self.is_production or license_constants.RELEASE_BUILD) and len(self.setup_token) < SETUP_TOKEN_MIN_LENGTH
 
     @property
     def cookie_secure(self) -> bool:
@@ -197,8 +198,10 @@ def settings_from_env(env: Mapping[str, str]) -> Settings:
     enforcement = _to_bool(g("LICENSE_ENFORCEMENT"), True)
     if not enforcement and app_env == "production":
         problems.append("LICENSE_ENFORCEMENT can only be turned off when APP_ENV=development")
+    elif not enforcement and license_constants.RELEASE_BUILD:
+        problems.append("LICENSE_ENFORCEMENT cannot be turned off in a customer release build")
     token = g("SETUP_TOKEN")
-    if token and app_env == "production" and (len(token) < SETUP_TOKEN_MIN_LENGTH or token.lower() in _PLACEHOLDERS
+    if token and (app_env == "production" or license_constants.RELEASE_BUILD) and (len(token) < SETUP_TOKEN_MIN_LENGTH or token.lower() in _PLACEHOLDERS
                                               or token.lower().startswith(("change", "replace"))):
         problems.append(f"SETUP_TOKEN must be a random value of at least {SETUP_TOKEN_MIN_LENGTH} characters in production "
                         "(run: python scripts/generate_keys.py)")

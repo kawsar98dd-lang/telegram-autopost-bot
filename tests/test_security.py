@@ -106,7 +106,7 @@ class RedactionTests(unittest.TestCase):
 class FooterTests(unittest.TestCase):
     def test_footer(self):
         footer = branding.render_footer()
-        self.assertIn("@YourService", footer)
+        self.assertIn("@AutoPosterHub", footer)
         self.assertTrue(footer.startswith(branding.FOOTER_SEPARATOR))
         self.assertNotIn("TAP-", footer)
 

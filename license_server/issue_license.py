@@ -48,6 +48,8 @@ def main(argv: list[str] | None = None, *, now: int | None = None) -> int:
     ap.add_argument("--host", default="", help="OPTIONAL: bind to the public address of the installation, e.g. poster.example.com")
     ap.add_argument("--product", default="telegram-auto-poster")
     ap.add_argument("--out", required=True, help="license file to create (outside the project, must not exist)")
+    ap.add_argument("--register-file", help="OPTIONAL: append a non-sensitive record of this sale (JSON line) to this file; keep it "
+                    "outside the project. Contains license ID, buyer reference, type, dates, host; never the key or the license text")
     ap.add_argument("--also-base64", action="store_true", help="also write <out>.b64 (one line, for LICENSE_FILE_CONTENT)")
     ap.add_argument("--yes", action="store_true", help="skip the confirmation question")
     args = ap.parse_args(argv)
@@ -65,6 +67,11 @@ def main(argv: list[str] | None = None, *, now: int | None = None) -> int:
     host = args.host.strip().lower()
     if host and not _HOST.match(host):
         return _fail("--host must look like poster.example.com (no scheme, no path)")
+    if args.license_type == "trial" and args.perpetual:
+        return _fail("a trial license must have an end date: use --expires, not --perpetual")
+    register = Path(args.register_file).expanduser() if args.register_file else None
+    if register is not None and inside_project(register):
+        return _fail("the register file must be outside the project folder")
     issued = int(now if now is not None else time.time())
     expires_at = None
     if args.expires:
@@ -109,6 +116,15 @@ def main(argv: list[str] | None = None, *, now: int | None = None) -> int:
         fh.write(text)
     if args.also_base64:
         out.with_name(out.name + ".b64").write_text(base64.b64encode(text.encode()).decode() + "\n", encoding="ascii")
+    if register is not None:
+        import json as _json
+        record = {"license_id": license_id, "product": args.product, "customer_ref": args.customer_ref, "license_type": args.license_type,
+                  "issued_at": datetime.fromtimestamp(issued, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                  "expires": "perpetual" if expires_at is None else args.expires, "host": host or None, "license_file": out.name}
+        register.parent.mkdir(parents=True, exist_ok=True)
+        with open(register, "a", encoding="utf-8") as fh:
+            fh.write(_json.dumps(record, sort_keys=True) + "\n")
+        print(f"Sale recorded in {register} (no secrets).")
     print(f"License written to {out}. Send this file to the customer; keep your private key offline and backed up.")
     return 0
 

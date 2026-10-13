@@ -14,7 +14,7 @@ Step 5 prepares posts. It does **not** send anything to Telegram and does **not*
 
 ## Mandatory footer
 
-* The footer text lives in exactly one place: `app/branding.py` (`FOOTER_SEPARATOR`, `FOOTER_TEXT`, `FOOTER_USERNAME`). It is source code owned by the seller, not an `.env` value and not a dashboard setting. Active footer: `🤖 Auto Posted by @YourService` (preceded by the separator line already defined in branding).
+* The footer text lives in exactly one place: `app/branding.py` (`FOOTER_SEPARATOR`, `FOOTER_TEXT`, `FOOTER_USERNAME`). It is source code owned by the seller, not an `.env` value and not a dashboard setting. Active footer: `🤖 Auto Posted by @AutoPosterHub` (the official product channel; Telegram clients normally render @username text as a tappable mention, but this has NOT been verified here because no message may be sent in this audit) (preceded by the separator line already defined in branding).
 * `app/posts/composer.py` is the only place that builds the final message: `compose(body, has_image)`. The preview uses it today; the Step 6 worker must call the same function when it sends.
 * The stored draft never contains the footer, and the browser never supplies the final text. Any footer typed or pasted by the user (end, middle, different case or spacing, even split/nested) is removed and exactly one footer is appended. Unknown form fields, JSON bodies and query parameters are ignored.
 * Because only the text is stored, changing the branding later changes every existing draft's preview and every future send without touching the posting code.

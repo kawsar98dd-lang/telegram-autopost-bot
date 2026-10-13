@@ -44,7 +44,7 @@ source code; see `docs/LICENSING.md` for the honest limits.
 
 `app/` application (`web`, `workers`, `scheduler`, `telegram`, `posts`, `licensing`, `auth`, `security`, `db`), `migrations/` PostgreSQL schema
 (forward-only, checksummed, advisory-locked), `Dockerfile`, `docker-compose.yml`, `docker-compose.https.yml` (optional Caddy HTTPS),
-`.env.example`, `scripts/generate_keys.py`.
+`.env.example`, `scripts/generate_keys.py`, `start_single_host.py` (optional launcher for single-command hosting panels).
 
 ## Tests (seller repository)
 

@@ -40,7 +40,14 @@ Install the new file or text the same way. A running installation notices a chan
   does not claim it is. Editing the code can also void support.
 * The seller does **not** collect a machine fingerprint; the optional address binding is the only installation rule.
 
+## License types
+
+`standard`, `commercial` and `trial` are labels agreed with the seller and shown on the License page; the program does not unlock or lock
+different features per type. A **trial** license always has an end date; a perpetual license never expires. A license may be bound to your
+public address (`APP_URL` host) if the seller and you agreed that.
+
 ## Production versus development
 
-`APP_ENV=production` always enforces the license (the setting `LICENSE_ENFORCEMENT=false` is rejected). Only `APP_ENV=development` together
-with `LICENSE_ENFORCEMENT=false` switches the check off, for local trials and testing. Never run a customer-facing installation that way.
+`APP_ENV=production` always enforces the license. In the **customer package** (a release build) `LICENSE_ENFORCEMENT=false` is rejected in every mode and
+the first-run page always needs a `SETUP_TOKEN`; `APP_ENV=development` there only allows plain `http://`. The check can be switched off only
+in the seller's own development tree. Someone who edits the source code can still change this (see the limits above).

@@ -10,15 +10,16 @@ file, `license_server/` and the test/CI material out.
 | `license_server/` (`keygen.py`, `issue_license.py`, `signing.py`, `safety.py`, `schema.sql`, `PROTOCOL.md`) | signing tools; the PRIVATE key is used with them (the key itself lives outside the project) |
 | the private key file (e.g. `~/secrets/license_private.key`) | the only thing that can create valid licenses |
 | issued license files (`*.license.json`) | belong to individual buyers |
-| `docs/SELLER_GUIDE.md`, `docs/STEP3_*`, `docs/STEP6_GITHUB_ANDROID_GUIDE_BN.md` | seller procedures and test guides |
+| every `docs/SELLER_*` file (guides, audit report, Bengali handover), `docs/STEP3_*`, `docs/STEP6_GITHUB_ANDROID_GUIDE_BN.md` | seller procedures and test guides |
+| the old ad-hoc `main.py` wrapper of your own Wispbyte server (it is not part of the repository) | replaced by the optional `start_single_host.py` for customers |
 | `tests/`, `.github/`, `scripts/ci_verify.py`, `scripts/build_customer_zip.py` | your development and release machinery |
 | `render.yaml`, `deploy/cloud-init-https-test.sh`, `deploy/diagnose.sh`, `deploy/check-secrets.sh`, `deploy/poster-token-cleanup.sh` | your own test deployments |
 
 | Customer package (built for you by the script) | |
 |---|---|
 | `app/`, `migrations/`, `Dockerfile`, `docker-compose.yml`, `docker-compose.https.yml`, `deploy/Caddyfile`, `requirements.txt`, `.env.example`, `.gitignore`, `.dockerignore` | the product |
-| `scripts/generate_keys.py`, `scripts/vendor_htmx.py` | customer helpers |
-| `README.md`, `CHANGELOG.md`, `docs/INSTALLATION_GUIDE.md`, `docs/LICENSING.md`, `docs/STEP4_GROUPS.md`, `docs/STEP5_POSTS.md`, `docs/STEP6_SCHEDULER.md` | documentation |
+| `scripts/generate_keys.py`, `scripts/vendor_htmx.py`, `start_single_host.py` | customer helpers |
+| `README.md`, `CHANGELOG.md`, `RELEASE_MANIFEST.json` (generated), `docs/INSTALLATION_GUIDE.md`, `docs/LICENSING.md`, `docs/STEP4_GROUPS.md`, `docs/STEP5_POSTS.md`, `docs/STEP6_SCHEDULER.md` | documentation |
 
 ## One time: create the signing key (on your own computer)
 
@@ -45,7 +46,12 @@ python license_server/issue_license.py --private-key-file ~/secrets/license_priv
   license to the customer's public address.
 * The tool prints a summary and asks you to type the license ID before signing. The key file must be owner-only and outside the project;
   the output must be outside the project and must not exist. The key is never printed or put into an error message.
+* `--license-type` is `standard`, `commercial` or `trial`. They are labels only (no feature differences). A `trial` must have `--expires`.
+* `--register-file ~/licenses/register.jsonl` appends one non-sensitive JSON line per sale (license ID, buyer reference, type, dates, host,
+  file name). It never contains the key, the signature or the license text. Keep it outside the project, and back it up with your key backups.
 * Send the `.license.json` (and the `.b64` one-line text) to the customer through a normal channel and keep your own copy.
+* **Never retype a public key by hand.** `keygen.py --write-constants` writes it for you; a valid key is exactly 43 characters. (A copy with
+  one character missing is a different, invalid key and no license would ever verify.)
 
 ## Build the customer package
 
@@ -53,6 +59,8 @@ python license_server/issue_license.py --private-key-file ~/secrets/license_priv
 python scripts/build_customer_zip.py --out ~/release --private-key-file ~/secrets/license_private.key
 ```
 
+The packaged copy of `app/licensing/constants.py` gets `RELEASE_BUILD = True` (the license check then cannot be disabled by an environment
+variable and the setup token is always required); your working tree keeps `False`. A `RELEASE_MANIFEST.json` with the SHA-256 of every file is added.
 The build is refused if: a forbidden file would be packed (`.env`, sessions, databases, keys, license files), a private-key marker, your private
 key's text or a Telegram token pattern appears in any packed file, packed code imports `license_server`/`tests`, or the build has no
 public key. It writes `telegram-auto-poster-customer-<version>.zip` and `<zip>.sha256`; send both to the customer.

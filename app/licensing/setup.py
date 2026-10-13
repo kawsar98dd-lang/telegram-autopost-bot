@@ -33,8 +33,8 @@ async def build_license_manager(settings: Settings, db, cipher: Cipher):
     * enforcement on and no (valid) public key in the build -> refuse to start with an actionable message.
     """
     if not settings.license_enforcement:
-        if settings.is_production:
-            raise LicenseSetupError("License enforcement cannot be disabled in production (APP_ENV=production).")
+        if settings.is_production or constants.RELEASE_BUILD:
+            raise LicenseSetupError("License enforcement cannot be disabled in production or in a customer release build.")
         return LicenseManager(store=DbLicenseStore(db, cipher), client=None, public_key=constants.LICENSE_PUBLIC_KEY,
                               product=constants.PRODUCT_ID, installation_id=await get_or_create_installation_id(db),
                               host=settings.app_host, app_version=__version__, enforcement=False)

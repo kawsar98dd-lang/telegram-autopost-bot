@@ -18,7 +18,7 @@ from tests.posts_support import jpeg, png
 from tests.support import migrated_db
 from tests.web_support import BASE_ENV
 
-FOOTER_LINE = "🤖 Auto Posted by @YourService"
+FOOTER_LINE = "🤖 Auto Posted by @AutoPosterHub"
 BIG = 10 * 1024 * 1024
 
 
@@ -40,10 +40,10 @@ class FooterTests(unittest.TestCase):
 
     def test_a_footer_typed_by_the_user_is_never_doubled(self):
         for body in (f"Hi\n\n{branding.render_footer()}", f"Hi\n{FOOTER_LINE}", f"{FOOTER_LINE}\nHi", f"Hi {FOOTER_LINE} there",
-                     f"Hi\n\n{FOOTER_LINE}\n\n{FOOTER_LINE}", f"Hi\n{FOOTER_LINE.upper()}", f"Hi\n🤖  Auto   Posted by  @YourService"):
+                     f"Hi\n\n{FOOTER_LINE}\n\n{FOOTER_LINE}", f"Hi\n{FOOTER_LINE.upper()}", f"Hi\n🤖  Auto   Posted by  @AutoPosterHub"):
             with self.subTest(body=body):
                 m = composer.compose(body, has_image=False)
-                self.assertEqual(m.text.lower().count("auto posted by @yourservice"), 1)
+                self.assertEqual(m.text.lower().count("auto posted by @autoposterhub"), 1)
                 self.assertEqual(m.text.count(branding.FOOTER_SEPARATOR), 1)
 
     def test_nested_footer_cannot_rebuild_itself(self):
@@ -52,7 +52,7 @@ class FooterTests(unittest.TestCase):
         self.assertEqual(composer.compose(body, has_image=False).text.count(FOOTER_LINE), 1)
 
     def test_stored_body_never_contains_the_footer(self):
-        self.assertNotIn("YourService", composer.normalize_body(f"Hi\n\n{branding.render_footer()}"))
+        self.assertNotIn("AutoPosterHub", composer.normalize_body(f"Hi\n\n{branding.render_footer()}"))
 
     def test_trailing_blank_lines_are_normalised(self):
         m = composer.compose("Hello\n\n\n\n\n   \n", has_image=False)
@@ -267,7 +267,7 @@ class SettingsTests(unittest.TestCase):
         self.assertIsNone(re.search(r"FOOTER", text))
         s = settings_from_env({**BASE_ENV, "FOOTER_TEXT": "x", "FOOTER_USERNAME": "@evil"})
         self.assertNotIn("evil", repr(s))
-        self.assertEqual(composer.compose("a", has_image=False).text.count("@YourService"), 1)
+        self.assertEqual(composer.compose("a", has_image=False).text.count("@AutoPosterHub"), 1)
 
     def test_literal_footer_text_lives_only_in_branding_and_tests(self):
         offenders = [str(p) for p in Path("app").rglob("*") if p.is_file() and p.suffix in (".py", ".html", ".js")

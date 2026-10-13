@@ -13,7 +13,7 @@ APP_DESCRIPTION = "Schedule marketing posts to your Telegram groups from your ow
 SUPPORT_URL = ""
 
 FOOTER_SEPARATOR = "━━━━━━━━━━━━━━━━"
-FOOTER_USERNAME = "@YourService"
+FOOTER_USERNAME = "@AutoPosterHub"  # official product channel https://t.me/AutoPosterHub
 FOOTER_TEXT = "🤖 Auto Posted by {username}"
 
 

@@ -4,6 +4,20 @@ Telegram Auto Poster posts your saved messages to Telegram groups **through your
 consists of a **web service** (the pages you click) and a **worker** (the program that really sends the posts at the scheduled time),
 both using one **PostgreSQL** database. The web service alone never sends anything: **the worker must be running**.
 
+## 0. What you receive and what you must provide
+
+**You receive:** the source code package (`telegram-auto-poster-customer-<version>.zip`, with its `.sha256` checksum and a
+`RELEASE_MANIFEST.json` listing the SHA-256 of every file) and your **license file** (sent separately by the seller).
+
+**You must provide:** your own server or computer (hosting), a PostgreSQL database (the package can start one for you with Docker), your own
+Telegram account, your own Telegram API ID/hash, and a domain with HTTPS if you want to reach it from outside. The seller does not provide
+hosting, uptime, Telegram accounts or Telegram's approval. Nothing here promises ban-free or unlimited posting.
+
+**Supported setups:** Docker with Docker Compose (recommended; the image uses Python 3.12 and PostgreSQL 16) or, without Docker, Python 3.12
+with PostgreSQL 14+. Building the Docker image needs internet access (it downloads Python packages and one pinned JavaScript file).
+The package was verified by its automated tests; a complete clean installation on a real server is something you confirm yourself with the
+"first use" checklist below.
+
 ## 1. What you need
 
 * A computer or server that can run Docker (Docker Desktop on Windows/Mac, or Docker Engine + Compose on Linux). About 1 GB of free memory.
@@ -31,6 +45,16 @@ both using one **PostgreSQL** database. The web service alone never sends anythi
    set `APP_HOST=poster.example.com`, `WEB_BIND_ADDR=127.0.0.1`, `TRUST_PROXY_HEADERS=true` in `.env` and run
    `docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build`. Only turn `TRUST_PROXY_HEADERS` on when a proxy really sits in front.
 
+### 2b. Hosting panels that give you only one start command (no Docker)
+
+Some hosting panels let you run just one command. Use `python start_single_host.py` as the start command. It applies the migrations (and
+**stops with a clear message if they fail**), starts the worker as a supervised background process (restarted automatically if it exits) and
+runs the web server on the port in `PORT` (or `WEB_PORT`, default 8000). It never changes `APP_ENV` or your other settings; real environment
+variables of the panel win over `.env`. Docker Compose remains the better choice (separate containers, health checks, restarts).
+If your panel gives you a fixed port, set `PORT` to it. `APP_ENV=production` needs an `https://` `APP_URL`; if your panel offers only plain
+http for a trial, you may use `APP_ENV=development` -- in this package that still **enforces the license** and still **requires a
+`SETUP_TOKEN`**; it only allows `http://`.
+
 ## 3. First use
 
 1. Open your `APP_URL`. A fresh installation shows **Create administrator**. In production this page is **locked until `SETUP_TOKEN` is set**
@@ -42,6 +66,8 @@ both using one **PostgreSQL** database. The web service alone never sends anythi
 5. **Posts:** write a draft, add an optional JPG/PNG image, choose target groups, check the preview (it includes the automatic footer).
 6. **Schedule this post:** choose one-time/daily/weekly/custom, the timezone (default `Asia/Dhaka`), review, save. **Posting jobs** shows the result.
 7. After the administrator exists you may delete `SETUP_TOKEN` from `.env`; the setup page is gone for good.
+8. **Safe test post:** use a private test group that only you are in, post one short text to it, and check that it arrives once with the
+   footer `🤖 Auto Posted by @AutoPosterHub`. Only after that schedule posts for real groups.
 
 ## 4. Settings you may change (`.env`)
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 import zipfile
@@ -23,7 +24,7 @@ VERSION_FILE = ROOT / "app" / "__init__.py"
 
 INCLUDE_DIRS = ("app", "migrations", "docs")
 INCLUDE_FILES = (".env.example", ".dockerignore", ".gitignore", "CHANGELOG.md", "Dockerfile", "README.md", "docker-compose.yml",
-                 "requirements.txt", "docker-compose.https.yml", "deploy/Caddyfile", "scripts/generate_keys.py", "scripts/vendor_htmx.py")
+                 "requirements.txt", "start_single_host.py", "docker-compose.https.yml", "deploy/Caddyfile", "scripts/generate_keys.py", "scripts/vendor_htmx.py")
 # Inside included directories, these are seller-only / test-only and are left out:
 EXCLUDE_PATHS = ("docs/STEP6_GITHUB_ANDROID_GUIDE_BN.md", "docs/SELLER_GUIDE.md", "docs/STEP3_REAL_TELEGRAM_VERIFICATION.md",
                  "docs/STEP3_REAL_TELEGRAM_VERIFICATION_RENDER.md", "docs/STEP3_REAL_TELEGRAM_VERIFICATION_ANDROID_CLOUD.md")
@@ -32,6 +33,7 @@ FORBIDDEN_NAME = re.compile(r"(^|/)(\.env(\..*)?|.*\.(session|session-journal|ke
 ALLOWED_NAME = {".env.example"}
 SECRET_PATTERNS = (re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----"), re.compile(rb"\b\d{8,10}:AA[A-Za-z0-9_-]{30,}\b"))
 EXCLUDED_IMPORT = re.compile(rb"^\s*(from|import)\s+(license_server|tests)\b", re.M)
+RELEASE_FLAG = re.compile(r"^RELEASE_BUILD\s*=\s*False\b.*$", re.M)
 PUBLIC_KEY = re.compile(r'^LICENSE_PUBLIC_KEY\s*=\s*"([A-Za-z0-9_-]{43})"', re.M)
 
 
@@ -47,7 +49,7 @@ def collect(root: Path) -> list[Path]:
     out = []
     for p in files:
         rel = p.relative_to(root).as_posix()
-        if rel in EXCLUDE_PATHS:
+        if rel in EXCLUDE_PATHS or Path(rel).name.startswith("SELLER_"):   # seller-only documents are never packed
             continue
         if not p.is_file():
             raise ReleaseError(f"expected file is missing: {rel}")
@@ -87,11 +89,27 @@ def build(root: Path, out_dir: Path, *, private_key_file: Path | None = None, al
     target = out_dir / f"telegram-auto-poster-customer-{version.group(1) if version else 'dev'}.zip"
     if target.exists():
         raise ReleaseError(f"refusing to overwrite {target}")
+    packed: dict[str, bytes] = {}
+    for p in files:
+        rel = p.relative_to(root).as_posix()
+        data = p.read_bytes()
+        if rel == "app/licensing/constants.py":  # the customer package is a RELEASE build (see constants.py)
+            text, n = RELEASE_FLAG.subn("RELEASE_BUILD = True", data.decode("utf-8"))
+            if n != 1:
+                raise ReleaseError("app/licensing/constants.py must contain exactly one 'RELEASE_BUILD = False' line")
+            data = text.encode("utf-8")
+        packed[rel] = data
+    key = PUBLIC_KEY.search(packed["app/licensing/constants.py"].decode("utf-8"))
+    manifest = {"product": "telegram-auto-poster", "version": version.group(1) if version else "dev", "release_build": True,
+                "license_mode": "offline signed license file (Ed25519)", "license_public_key": key.group(1) if key else "",
+                "files": {rel: hashlib.sha256(data).hexdigest() for rel, data in sorted(packed.items())},
+                "note": "SHA-256 of every file in this package. A private signing key is never part of a package."}
+    packed["RELEASE_MANIFEST.json"] = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as zf:
-        for p in files:
-            info = zipfile.ZipInfo("telegram-auto-poster/" + p.relative_to(root).as_posix(), date_time=(2020, 1, 1, 0, 0, 0))
+        for rel, data in sorted(packed.items()):
+            info = zipfile.ZipInfo("telegram-auto-poster/" + rel, date_time=(2020, 1, 1, 0, 0, 0))
             info.external_attr = 0o644 << 16
-            zf.writestr(info, p.read_bytes())
+            zf.writestr(info, data)
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
     target.with_name(target.name + ".sha256").write_text(f"{digest}  {target.name}\n", encoding="ascii")
     return target, digest

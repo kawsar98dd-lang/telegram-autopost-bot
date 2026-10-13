@@ -14,7 +14,7 @@ from tests.fake_telegram import GOOD_API_HASH
 from tests.posts_support import PostsBase, jpeg, png
 from tests.web_support import Env
 
-FOOTER_LINE = "🤖 Auto Posted by @YourService"
+FOOTER_LINE = "🤖 Auto Posted by @AutoPosterHub"
 
 
 class DraftLifecycleTests(PostsBase):
@@ -111,7 +111,7 @@ class FooterEnforcementTests(PostsBase):
     async def test_the_footer_typed_by_the_user_is_not_duplicated(self):
         pid = await self.make_post(body=f"Hello\n\n{FOOTER_LINE}")
         self.assertEqual(self.message_box(await self.preview(pid)).count(FOOTER_LINE), 1)
-        self.assertNotIn("YourService", self.row(pid)["body"])
+        self.assertNotIn("AutoPosterHub", self.row(pid)["body"])
 
     async def test_a_forged_form_cannot_remove_replace_or_disable_the_footer(self):
         pid = await self.make_post(body="Hello")
@@ -165,7 +165,7 @@ class FooterEnforcementTests(PostsBase):
         finally:
             branding.FOOTER_USERNAME = old
         self.assertIn("@NewBrand", box)
-        self.assertNotIn("@YourService", box)
+        self.assertNotIn("@AutoPosterHub", box)
 
     async def test_preview_and_sender_use_the_same_function(self):
         from app.posts import composer

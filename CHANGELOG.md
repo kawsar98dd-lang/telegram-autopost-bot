@@ -1,5 +1,12 @@
 # Changelog
 
+## Commercial release preparation
+* Footer username is now `@AutoPosterHub` (official channel); footer tests added.
+* `RELEASE_BUILD` flag: the customer package cannot disable license enforcement by environment variable and always requires a `SETUP_TOKEN`.
+* Trial licenses must expire; `issue_license.py --register-file` keeps a non-sensitive sales record.
+* `start_single_host.py`: safe optional launcher (replaces the ad-hoc wrapper: no forced development mode, migration failure stops the start, supervised worker, configurable port).
+* Customer ZIP now includes `RELEASE_MANIFEST.json`; every `docs/SELLER_*` file stays seller-only.
+
 ## Production setup lock
 * Production never offers the first-run page without a `SETUP_TOKEN` of at least 16 characters (locked page, HTTP 403, nothing written); short/placeholder tokens are refused by configuration. `generate_keys.py` creates one.
 * Worker loop body extracted (`work_cycle`) so license enforcement is testable; the first stale-job recovery no longer waits after a fresh boot.
