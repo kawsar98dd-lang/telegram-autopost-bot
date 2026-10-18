@@ -39,8 +39,7 @@ The package was verified by its automated tests; a complete clean installation o
    * optional: `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` (otherwise you type them when you connect an account)
    * your license: `LICENSE_FILE_CONTENT=<one line from the seller>` (or install the file later, see `docs/LICENSING.md`)
 4. Start everything: `docker compose up -d --build`. This starts PostgreSQL, applies the database migrations once (the `migrate` service), then
-   starts the `web` and the `worker`. Check: `docker compose ps` (all "running"/"healthy") and open `http://<server>:8000/health/ready`
-   (it must answer `{"status":"ready"}`).
+   starts the `web` and the `worker`. Check: `docker compose ps` (the database and web should be healthy; the one-off `migrate` service should finish successfully, and the worker should remain running). For a local/private check, open `http://127.0.0.1:8000/health/ready` on the server (it must answer `{"status":"ready"}`). **Do not expose port 8000 directly to the public internet for production use.** Set up HTTPS in step 5; when using the included Caddy overlay, set `WEB_BIND_ADDR=127.0.0.1` so only Caddy is publicly reachable.
 5. HTTPS: put any HTTPS reverse proxy in front, or use the included optional Caddy overlay (automatic certificate):
    set `APP_HOST=poster.example.com`, `WEB_BIND_ADDR=127.0.0.1`, `TRUST_PROXY_HEADERS=true` in `.env` and run
    `docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build`. Only turn `TRUST_PROXY_HEADERS` on when a proxy really sits in front.
@@ -150,7 +149,7 @@ Telegram offers no way to send "exactly once". The application is built to **pre
 
 * Real Telegram behaviour (rate-limit values, error names, login-dependent details) cannot be fully simulated; test with one post to one test group
   first (`docs/STEP6_SCHEDULER.md`, "Manual Telegram acceptance test").
-* One schedule per draft; a schedule's target groups cannot be edited afterwards (cancel and create a new one).
-* The Logs page is a placeholder; history is shown under **Posting jobs** and in each schedule.
+* One schedule per draft. To change an existing schedule, pause it first, then use **Edit schedule** to change timing and eligible target groups; review the warning about cancelling pending jobs, save, and resume only after checking the saved settings. A request already in flight may not be recallable.
+* The **Logs** page provides a user-scoped, filterable activity log. Posting-job delivery status and uncertain-send decisions remain available under **Posting jobs** and each schedule.
 * Offline licensing cannot count installations or recall a license (`docs/LICENSING.md`).
 * Hosting that sleeps when idle, or has no background workers, is not suitable for the worker.

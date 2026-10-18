@@ -24,7 +24,7 @@ python scripts/generate_keys.py --init-env      # creates .env with fresh secret
 docker compose up -d --build                    # database + migrations + web + worker
 ```
 
-Open `APP_URL`, create the administrator with your `SETUP_TOKEN`, connect your Telegram account, refresh groups, write a post, schedule it.
+Open `APP_URL`, create the administrator with your `SETUP_TOKEN`, connect your Telegram account, refresh groups, write a post, schedule it. For production, do not expose port 8000 directly; configure HTTPS as described in the installation guide.
 
 ## The encryption key
 
