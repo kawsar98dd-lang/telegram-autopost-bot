@@ -18,12 +18,22 @@ REPO = Path(__file__).resolve().parent.parent
 
 class CustomerBuilderCliTests(unittest.TestCase):
     def test_cli_invocation_reaches_release_checks_instead_of_failing_import(self):
-        # The pinned HTMX file is absent in this audit environment. The CLI should
-        # fail closed with the expected release error, not crash before validation.
+        # Test the missing-asset refusal in an isolated copy. CI may have the
+        # verified HTMX asset downloaded, so relying on the checkout's current
+        # asset state makes this regression test nondeterministic.
         with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            isolated_repo = td_path / "repo"
+            shutil.copytree(
+                REPO, isolated_repo,
+                ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "data", "test-report.json"),
+            )
+            asset = isolated_repo / "app" / "web" / "static" / "vendor" / "htmx.min.js"
+            if asset.exists():
+                asset.unlink()
             result = subprocess.run(
-                [sys.executable, str(REPO / "scripts" / "build_customer_zip.py"), "--out", str(Path(td) / "release")],
-                cwd=REPO, capture_output=True, text=True, timeout=15,
+                [sys.executable, str(isolated_repo / "scripts" / "build_customer_zip.py"), "--out", str(td_path / "release")],
+                cwd=isolated_repo, capture_output=True, text=True, timeout=15,
             )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("RELEASE REFUSED:", result.stderr)
