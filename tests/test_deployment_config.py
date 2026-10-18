@@ -67,7 +67,7 @@ class WorkflowTests(unittest.TestCase):
         commands = "\n".join(str(step.get("run", "")) for step in steps)
         self.assertIn("scripts/vendor_htmx.py --verify", commands)
         self.assertIn("scripts/build_customer_zip.py --out release", commands)
-        uploads = [step for step in steps if step.get("uses") == "actions/upload-artifact@v4"]
+        uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@") and step.get("uses", "").rsplit("@", 1)[-1].startswith("v")]
         self.assertEqual(len(uploads), 1)
         self.assertIn("telegram-auto-poster-customer-0.1.3.zip*", uploads[0]["with"]["path"])
 
