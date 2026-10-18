@@ -64,7 +64,7 @@ class SchedulerPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_migration_0006_applies_to_an_existing_database_and_keeps_data(self):
         seeded = await self.seed()
         applied = await self.migrate_to_latest()
-        self.assertEqual(applied, ["0006_scheduler"])
+        self.assertEqual(applied, ["0006_scheduler", "0007_safety_notifications"])
         self.assertEqual(await self.migrate_to_latest(), [])
         u, acc, post, sid, gids = seeded[0]
         row = await self.pool.fetchrow("SELECT status, cancelled_at, kind FROM schedules WHERE id = $1", sid)
