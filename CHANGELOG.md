@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.3 — audit logs and safe schedule editing
+* Implemented the authenticated, user-scoped posting Logs page with date, level, event and job-status filters, pagination, safe structured details, and related job/schedule navigation.
+* Added in-place editing for paused schedules. The schedule ID and existing history are retained; post content is not editable in this workflow.
+* Saving an edit cancels pending/queued jobs tied to the old settings and records the action. Resume computes the next valid occurrence, skipping occurrences missed during the pause.
+* Added schedule-created/paused/resumed/edited audit events and a final send gate that checks pause/cancel state while serialized with schedule state changes.
+* Added user-facing warnings about requests already in flight; those requests cannot be recalled reliably.
+
+
+## 0.1.1 — working-copy alignment
+* Set the application version to `0.1.1` so the app, customer ZIP filename, and generated release manifest agree.
+* Synchronized the seller working copy's embedded Ed25519 public key with the current customer release key. The seller tree remains `RELEASE_BUILD = False`; the release builder sets it to `True` only in the customer package.
+* Updated the seller guide's example release filename and the manifest-version regression test.
+
 ## Commercial release preparation
 * Footer username is now `@AutoPosterHub` (official channel); footer tests added.
 * `RELEASE_BUILD` flag: the customer package cannot disable license enforcement by environment variable and always requires a `SETUP_TOKEN`.

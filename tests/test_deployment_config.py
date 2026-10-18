@@ -54,10 +54,22 @@ class WorkflowTests(unittest.TestCase):
 
     def test_final_gate_fails_unless_every_job_really_succeeded(self):
         gate = self.ci["jobs"]["verify-all"]
-        self.assertEqual(gate["needs"], ["test", "docker"])
+        self.assertEqual(gate["needs"], ["test", "docker", "customer_package"])
         self.assertEqual(gate["if"], "always()")  # runs even when a needed job failed or was skipped
         self.assertIn('"${{ needs.docker.result }}" = "success"', self.text)
         self.assertIn('"${{ needs.test.result }}" = "success"', self.text)
+        self.assertIn('"${{ needs.customer_package.result }}" = "success"', self.text)
+
+    def test_customer_zip_is_built_only_after_tests_and_docker_and_uploaded(self):
+        job = self.ci["jobs"]["customer_package"]
+        self.assertEqual(job["needs"], ["test", "docker"])
+        steps = job["steps"]
+        commands = "\n".join(str(step.get("run", "")) for step in steps)
+        self.assertIn("scripts/vendor_htmx.py --verify", commands)
+        self.assertIn("scripts/build_customer_zip.py --out release", commands)
+        uploads = [step for step in steps if step.get("uses") == "actions/upload-artifact@v4"]
+        self.assertEqual(len(uploads), 1)
+        self.assertIn("telegram-auto-poster-customer-0.1.3.zip*", uploads[0]["with"]["path"])
 
     def test_docker_job_builds_starts_and_checks_health(self):
         text = self.text

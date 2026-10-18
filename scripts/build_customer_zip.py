@@ -4,9 +4,9 @@
 
 Included: the application, migrations, deployment files (Docker, optional Caddy HTTPS) and customer documentation (an explicit list below).
 Never included: license_server/ (seller tools), docs/SELLER_GUIDE.md, tests/, CI files, test-deployment helpers, secrets of any kind.
-The build FAILS if: a forbidden file would be packed, a secret pattern or the seller's private key text appears in any packed
-file, packed code imports an excluded module, or the build has no valid license public key (override only with
---allow-empty-public-key for non-release test builds). Writes <zip> and <zip>.sha256.
+The build FAILS if: the pinned local HTMX asset is missing or has a checksum mismatch, a forbidden file would be packed, a secret
+pattern or the seller's private key text appears in any packed file, packed code imports an excluded module, or the build has no valid
+license public key (override only with --allow-empty-public-key for non-release test builds). Writes <zip> and <zip>.sha256.
 """
 
 from __future__ import annotations
@@ -20,6 +20,13 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# When invoked as `python scripts/build_customer_zip.py`, Python puts the
+# scripts/ directory (not the project root) at sys.path[0]. Ensure the
+# package-style import works both as a CLI and as an imported test module.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts import vendor_htmx  # noqa: E402
 VERSION_FILE = ROOT / "app" / "__init__.py"
 
 INCLUDE_DIRS = ("app", "migrations", "docs")
@@ -73,7 +80,18 @@ def check_contents(root: Path, files: list[Path], private_key_text: str = "") ->
             raise ReleaseError(f"{rel} imports an excluded module (license_server / tests)")
 
 
+def verify_htmx_asset(root: Path) -> None:
+    """Refuse to package a UI that references a missing or unverified local HTMX asset."""
+    asset = root / "app" / "web" / "static" / "vendor" / "htmx.min.js"
+    if not asset.is_file():
+        raise ReleaseError("verified HTMX asset is missing: run `python scripts/vendor_htmx.py` with internet access, then retry")
+    actual = vendor_htmx.sha384_b64(asset.read_bytes())
+    if actual != vendor_htmx.SHA384_B64:
+        raise ReleaseError("vendored HTMX checksum does not match the pinned version: run `python scripts/vendor_htmx.py` to replace it safely")
+
+
 def build(root: Path, out_dir: Path, *, private_key_file: Path | None = None, allow_empty_public_key: bool = False) -> tuple[Path, str]:
+    verify_htmx_asset(root)
     consts = (root / "app" / "licensing" / "constants.py").read_text(encoding="utf-8")
     if not PUBLIC_KEY.search(consts) and not allow_empty_public_key:
         raise ReleaseError("app/licensing/constants.py has no LICENSE_PUBLIC_KEY: run license_server/keygen.py --write-constants first")

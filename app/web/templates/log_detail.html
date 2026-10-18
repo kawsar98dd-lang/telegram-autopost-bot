@@ -1,0 +1,11 @@
+{% extends "shell.html" %}
+{% block title %}Log details · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Log details</h1><section class="card"><p><span class="badge {{ 'bad' if entry.level=='error' else ('warn' if entry.level=='warning' else 'ok') }}">{{ entry.level|upper }}</span> · {{ entry.event }}</p>
+<dl class="facts"><dt>Timestamp (UTC)</dt><dd>{{ entry.created_at|utc }}</dd><dt>Message</dt><dd>{{ entry.message }}</dd>
+<dt>Job</dt><dd>{% if entry.job_id %}<a href="/jobs">View posting jobs</a>{% else %}-{% endif %}</dd>
+<dt>Schedule</dt><dd>{% if entry.schedule_id %}<a href="/schedules/{{ entry.schedule_id }}">View schedule</a>{% else %}-{% endif %}</dd>
+<dt>Group</dt><dd>{{ entry.group_title or '-' }}</dd><dt>Job status</dt><dd>{{ entry.job_status or '-' }} / {{ entry.delivery_state or '-' }}</dd></dl>
+<h2>Safe structured details</h2><pre class="message-box">{{ entry.details|tojson(indent=2) }}</pre>
+<p class="hint">This view shows audit metadata only. It does not include post content, session material, credentials, or environment secrets.</p></section><a href="/logs">Back to logs</a>
+{% endblock %}

@@ -25,6 +25,7 @@ from ..posts.storage import make_storage
 from ..scheduler import policy
 from ..scheduler.executor import JobExecutor
 from ..scheduler.queue import JobQueue
+from ..safety.engine import SafetyMonitor
 from ..security.crypto import Cipher, init_cipher
 from ..telegram.connect import TelegramConnectionService
 from ..telegram.service import TelegramClientService
@@ -47,6 +48,7 @@ class CycleState:
     def __init__(self) -> None:
         self.license_state = None
         self.last_recovery: float | None = None  # None = never: the very first cycle always recovers stale jobs
+        self.last_safety_scan: float | None = None
 
 
 async def work_cycle(manager, queue, executor, stop: asyncio.Event, state: CycleState, *,
@@ -63,6 +65,18 @@ async def work_cycle(manager, queue, executor, stop: asyncio.Event, state: Cycle
         if any(recovered.values()):
             log.warning("recovered stale jobs: %s", recovered)
         state.last_recovery = monotonic()
+    # Safety monitoring is best-effort and isolated from the posting path. It runs at most
+    # every five minutes; an analysis failure never prevents due jobs from being processed.
+    now_mono = monotonic()
+    if state.last_safety_scan is None or now_mono - state.last_safety_scan >= 300:
+        try:
+            safety_result = await SafetyMonitor(queue._db).scan()
+            if safety_result.get("errors"):
+                log.warning("safety monitoring completed with %s user-scan errors", safety_result["errors"])
+            state.last_safety_scan = now_mono
+        except Exception:
+            log.warning("safety monitoring unavailable; posting cycle will continue", exc_info=True)
+            state.last_safety_scan = now_mono
     await queue.materialize_due()
     while not stop.is_set() and await executor.run_once():  # drains everything that is due, account by account
         touch_heartbeat()

@@ -6,6 +6,8 @@ import io
 import json
 import os
 import shutil
+import hashlib
+import base64
 import subprocess
 import sys
 import tempfile
@@ -158,9 +160,16 @@ class PackageFlagTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "proj"
         shutil.copytree(ROOT, self.root, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "data", "test-report.json"))
+        # Use a deterministic test fixture for the vendored asset; CI separately verifies the real pinned file.
+        asset = self.root / "app" / "web" / "static" / "vendor" / "htmx.min.js"
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_bytes(b"test-only-htmx-fixture")
+        self._old_htmx_checksum = bcz.vendor_htmx.SHA384_B64
+        bcz.vendor_htmx.SHA384_B64 = base64.b64encode(hashlib.sha384(asset.read_bytes()).digest()).decode("ascii")
         self.out = Path(self.tmp.name) / "release"
 
     def tearDown(self):
+        bcz.vendor_htmx.SHA384_B64 = self._old_htmx_checksum
         self.tmp.cleanup()
 
     def test_customer_package_is_a_release_build_and_the_source_tree_is_not_touched(self):
@@ -180,7 +189,7 @@ class PackageFlagTests(unittest.TestCase):
         target, _ = bcz.build(self.root, self.out)
         with zipfile.ZipFile(target) as zf:
             manifest = json.loads(zf.read("telegram-auto-poster/RELEASE_MANIFEST.json"))
-            self.assertEqual((manifest["product"], manifest["version"], manifest["release_build"]), ("telegram-auto-poster", "0.1.0", True))
+            self.assertEqual((manifest["product"], manifest["version"], manifest["release_build"]), ("telegram-auto-poster", "0.1.3", True))
             self.assertEqual(manifest["license_public_key"], constants.LICENSE_PUBLIC_KEY)
             packed = {n[len("telegram-auto-poster/"):] for n in zf.namelist()} - {"RELEASE_MANIFEST.json"}
             self.assertEqual(set(manifest["files"]), packed)

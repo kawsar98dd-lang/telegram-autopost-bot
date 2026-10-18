@@ -40,6 +40,20 @@ class SqliteDb:
         self._lock = asyncio.Lock()
         self._in_tx = False
 
+    def close(self) -> None:
+        """Close the in-memory SQLite connection; safe to call more than once."""
+        self.conn.close()
+
+    def __del__(self) -> None:
+        # Many small unit tests create this helper inline and don't retain it for
+        # teardown. Close as a last-resort fallback so Python 3.13+ doesn't emit
+        # ResourceWarning for an abandoned sqlite3 connection. Tests that own a
+        # fixture should still prefer explicit cleanup where practical.
+        try:
+            self.conn.close()
+        except Exception:  # noqa: BLE001 - interpreter shutdown / partially initialized object
+            pass
+
     def _prep(self, sql: str, args: tuple):
         order = [int(n) - 1 for n in _PLACEHOLDER.findall(sql)]
         return _PLACEHOLDER.sub("?", sql), tuple(args[i] for i in order)

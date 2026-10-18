@@ -2,7 +2,7 @@
 
 PRODUCT_ID = "telegram-auto-poster"
 LICENSE_SERVER_URL = ""
-LICENSE_PUBLIC_KEY = "3aBHyapi7rjP-l4qt7G37M7k-B_u9ht1RVvM1B-tm8s"
+LICENSE_PUBLIC_KEY = "wdLw5Mvn2VsNKm__-VdHCXRJUx7fESuDpXqqoBlxF9E"
 
 # False in the seller's working tree. scripts/build_customer_zip.py writes True into the CUSTOMER package. In a release build the
 # license check cannot be switched off by an environment variable (LICENSE_ENFORCEMENT=false is rejected whatever APP_ENV says) and

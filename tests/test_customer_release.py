@@ -1,9 +1,13 @@
 """The customer ZIP builder: what ships, what never ships, and that it refuses unsafe builds."""
 
 import shutil
+import hashlib
+import base64
 import tempfile
 import unittest
 import zipfile
+import subprocess
+import sys
 from pathlib import Path
 
 from scripts import build_customer_zip as bcz
@@ -12,12 +16,34 @@ from tests.support import signing
 REPO = Path(__file__).resolve().parent.parent
 
 
+class CustomerBuilderCliTests(unittest.TestCase):
+    def test_cli_invocation_reaches_release_checks_instead_of_failing_import(self):
+        # The pinned HTMX file is absent in this audit environment. The CLI should
+        # fail closed with the expected release error, not crash before validation.
+        with tempfile.TemporaryDirectory() as td:
+            result = subprocess.run(
+                [sys.executable, str(REPO / "scripts" / "build_customer_zip.py"), "--out", str(Path(td) / "release")],
+                cwd=REPO, capture_output=True, text=True, timeout=15,
+            )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("RELEASE REFUSED:", result.stderr)
+        self.assertIn("verified HTMX asset is missing", result.stderr)
+        self.assertNotIn("ModuleNotFoundError", result.stderr)
+
+
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "proj"
         shutil.copytree(REPO, self.root, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "data", "test-report.json"))
         self.private, self.public = signing.generate_keypair()
+        # A tiny deterministic fixture stands in for the vendor asset in unit tests;
+        # the real CI job separately downloads and verifies the actual pinned HTMX file.
+        asset = self.root / "app" / "web" / "static" / "vendor" / "htmx.min.js"
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        asset.write_bytes(b"test-only-htmx-fixture")
+        self._old_htmx_checksum = bcz.vendor_htmx.SHA384_B64
+        bcz.vendor_htmx.SHA384_B64 = base64.b64encode(hashlib.sha384(asset.read_bytes()).digest()).decode("ascii")
         consts = self.root / "app" / "licensing" / "constants.py"
         text = consts.read_text()
         import re
@@ -25,6 +51,7 @@ class ReleaseTests(unittest.TestCase):
         self.out = Path(self.tmp.name) / "release"
 
     def tearDown(self):
+        bcz.vendor_htmx.SHA384_B64 = self._old_htmx_checksum
         self.tmp.cleanup()
 
     def build(self, **kw):
@@ -103,6 +130,16 @@ class ReleaseTests(unittest.TestCase):
         names = self.names(target)
         self.assertIn("telegram-auto-poster/.env.example", names)
         self.assertNotIn("telegram-auto-poster/.env", names)
+
+
+    def test_build_refuses_missing_or_unverified_htmx(self):
+        asset = self.root / "app" / "web" / "static" / "vendor" / "htmx.min.js"
+        asset.unlink()
+        with self.assertRaisesRegex(bcz.ReleaseError, "HTMX asset is missing"):
+            self.build()
+        asset.write_bytes(b"wrong-asset")
+        with self.assertRaisesRegex(bcz.ReleaseError, "checksum does not match"):
+            self.build()
 
     def test_refuses_to_overwrite_an_existing_release(self):
         self.build()

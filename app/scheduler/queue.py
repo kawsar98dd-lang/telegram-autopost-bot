@@ -245,11 +245,21 @@ class JobQueue:
         request goes out, so a crash from here on is recorded as 'sending' and recovered as 'uncertain'.
         """
         now = self.now()
-        row = await self._db.fetchrow(
-            "UPDATE posting_jobs SET delivery_state = 'sending', send_started_at = $3, lease_expires_at = $4, updated_at = $3 "
-            "WHERE id = $1 AND locked_by = $2 AND status = 'processing' AND delivery_state = 'not_sent' RETURNING id",
-            job.id, worker_id, now, now + timedelta(seconds=policy.LEASE_SECONDS))
-        return row is not None
+        # Serialize the final send decision with Pause/Edit/Cancel. The schedule-row share lock is
+        # held only for this short database transaction, never across the Telegram network request.
+        async with self._db.transaction() as tx:
+            if job.schedule_id is not None:
+                sql = ("SELECT status, cancelled_at FROM schedules WHERE id=$1 AND user_id=$2 FOR SHARE"
+                       if getattr(self._db, "dialect", "postgres") == "postgres"
+                       else "SELECT status, cancelled_at FROM schedules WHERE id=$1 AND user_id=$2")
+                sched = await tx.fetchrow(sql, job.schedule_id, job.user_id)
+                if sched is None or sched["status"] == "paused" or sched["cancelled_at"] is not None:
+                    return False
+            row = await tx.fetchrow(
+                "UPDATE posting_jobs SET delivery_state = 'sending', send_started_at = $3, lease_expires_at = $4, updated_at = $3 "
+                "WHERE id = $1 AND locked_by = $2 AND status = 'processing' AND delivery_state = 'not_sent' RETURNING id",
+                job.id, worker_id, now, now + timedelta(seconds=policy.LEASE_SECONDS))
+            return row is not None
 
     async def mark_posted(self, job: Job, worker_id: str, message_ids: list[int]) -> bool:
         now = self.now()

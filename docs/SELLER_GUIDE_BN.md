@@ -31,7 +31,7 @@ python license_server/issue_license.py --private-key-file ~/secrets/license_priv
 ```
 python scripts/build_customer_zip.py --out ~/release --private-key-file ~/secrets/license_private.key
 ```
-ফলে `telegram-auto-poster-customer-0.1.0.zip` ও `.sha256` তৈরি হয়। ক্রেতাকে পাঠান: ZIP + চেকসাম + (আলাদা বার্তায়) তার লাইসেন্স ফাইল। এক বার্তায় সব না পাঠানোই ভালো।
+ফলে `telegram-auto-poster-customer-0.1.1.zip` ও `.sha256` তৈরি হয়। ক্রেতাকে পাঠান: ZIP + চেকসাম + (আলাদা বার্তায়) তার লাইসেন্স ফাইল। এক বার্তায় সব না পাঠানোই ভালো।
 
 ## ৬. ঐচ্ছিক পেইড সেটআপ সহায়তা (TODO: দাম ও সময়)
 ক্রেতা নিজে ইনস্টল করতে না পারলে আপনি স্ক্রিন-শেয়ারে বা নির্দেশনা দিয়ে সাহায্য করতে পারেন। কখনও তার Telegram কোড/পাসওয়ার্ড নিজে লিখবেন না; ক্রেতা নিজে সংযোগ করবেন।

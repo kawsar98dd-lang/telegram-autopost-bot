@@ -1,10 +1,22 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# CI needs to read source and upload artifacts; it must not write to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-auto-poster-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
     name: Tests (real PostgreSQL, real FastAPI)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
@@ -89,6 +101,7 @@ jobs:
   docker:
     name: Docker image and compose stack
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -132,15 +145,42 @@ jobs:
       - if: always()
         run: docker compose down -v
 
-  # Final gate: green ONLY if both jobs actually ran and succeeded. A skipped, cancelled or
-  # failed job (including the Docker verification) makes the whole pipeline red.
+  # Build a customer ZIP only after the full tests and Docker verification both pass.
+  # The workflow downloads HTMX from its fixed upstream URL and verifies the pinned SHA-384
+  # before packaging; the application itself never loads JavaScript from a CDN at runtime.
+  customer_package:
+    name: Verified customer ZIP
+    needs: [test, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Vendor and verify HTMX
+        run: |
+          python scripts/vendor_htmx.py --if-missing
+          python scripts/vendor_htmx.py --verify
+      - name: Build customer ZIP (secret scan + release manifest)
+        run: python scripts/build_customer_zip.py --out release
+      - name: Upload customer ZIP and SHA-256
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-auto-poster-customer-0.1.3
+          path: release/telegram-auto-poster-customer-0.1.3.zip*
+          if-no-files-found: error
+
+  # Final gate: green ONLY if every test, Docker and release-package job actually succeeded.
   verify-all:
     name: All verifications must have run and passed
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: always()
-    needs: [test, docker]
+    needs: [test, docker, customer_package]
     steps:
       - run: |
-          echo "test=${{ needs.test.result }} docker=${{ needs.docker.result }}"
+          echo "test=${{ needs.test.result }} docker=${{ needs.docker.result }} customer-package=${{ needs.customer_package.result }}"
           test "${{ needs.test.result }}" = "success"
           test "${{ needs.docker.result }}" = "success"
+          test "${{ needs.customer_package.result }}" = "success"

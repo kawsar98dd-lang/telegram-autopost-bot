@@ -454,6 +454,15 @@ class ExecutorTests(SchedBase):
         self.assertEqual(self.only_job()["status"], "cancelled")
         self.assertEqual(self.world.sent, [])
 
+    async def test_paused_schedule_blocks_a_claimed_job_at_final_send_gate(self):
+        _, sid = await self.go()
+        _, jobs = await self.queue.claim_account_batch("w1")
+        self.env.db.conn.execute("UPDATE schedules SET status='paused' WHERE id=?", (sid,))
+        self.env.db.conn.commit()
+        self.assertFalse(await self.queue.begin_send(jobs[0], "w1"))
+        self.assertEqual(self.world.sent, [])
+        self.assertEqual(self.only_job()["delivery_state"], "not_sent")
+
     async def test_graceful_shutdown_releases_unstarted_jobs(self):
         await self.go(groups=(self.g_ok, self.g_ok2))
         self.stop.set()

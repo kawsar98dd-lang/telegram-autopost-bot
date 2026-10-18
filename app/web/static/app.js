@@ -20,9 +20,60 @@
     var t = e.target.closest("[data-toggle-nav]");
     if (t) {
       var nav = document.getElementById("sidebar");
-      if (nav) nav.classList.toggle("open");
+      if (nav) {
+        var isOpen = nav.classList.toggle("open");
+        t.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      }
     }
   });
+
+  // Keep the mobile navigation accessible and easy to dismiss.
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      var nav = document.getElementById("sidebar");
+      var toggle = document.querySelector("[data-toggle-nav]");
+      if (nav && nav.classList.contains("open")) {
+        nav.classList.remove("open");
+        if (toggle) { toggle.setAttribute("aria-expanded", "false"); toggle.focus(); }
+      }
+    }
+  });
+  document.addEventListener("click", function (e) {
+    var nav = document.getElementById("sidebar");
+    var toggle = document.querySelector("[data-toggle-nav]");
+    if (!nav || !toggle) return;
+    if (e.target.closest("#sidebar a")) {
+      if (window.matchMedia("(max-width: 760px)").matches) nav.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+      return;
+    }
+    // Dismiss the mobile menu when the user taps outside it.
+    if (window.matchMedia("(max-width: 760px)").matches && nav.classList.contains("open") &&
+        !e.target.closest("#sidebar") && !e.target.closest("[data-toggle-nav]")) {
+      nav.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  // Give headed data tables useful labels when they switch to a mobile record layout.
+  // The table remains a normal semantic table on larger screens and keeps all cells/actions.
+  function prepareResponsiveTables(root) {
+    (root || document).querySelectorAll("table").forEach(function (table) {
+      var headers = table.querySelectorAll("thead th");
+      if (!headers.length) return;
+      var labels = Array.prototype.map.call(headers, function (th) {
+        return (th.textContent || "").replace(/\s+/g, " ").trim();
+      });
+      table.setAttribute("data-responsive-cards", "");
+      table.querySelectorAll("tbody tr").forEach(function (row) {
+        Array.prototype.forEach.call(row.cells, function (cell, index) {
+          if (!cell.hasAttribute("data-label")) cell.setAttribute("data-label", labels[index] || "");
+        });
+      });
+    });
+  }
+  prepareResponsiveTables();
+  document.addEventListener("htmx:afterSwap", function (e) { prepareResponsiveTables(e.target); });
 
   // Post editor: live character counter (UTF-16 units, like Telegram), group filter and selected counter.
   // The server validates everything again; this is only a convenience.

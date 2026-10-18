@@ -24,7 +24,7 @@ P = "posts.manage"
 WRITE_LIMIT, WRITE_WINDOW = 60, 10 * 60
 NOTICES = {"created": "Schedule saved. The worker sends the post at the chosen time.", "paused": "Schedule paused.",
            "resumed": "Schedule resumed.", "cancelled": "Schedule cancelled.", "retried": "The job was queued again.",
-           "confirmed": "Marked as delivered."}
+           "confirmed": "Marked as delivered.", "edited": "Schedule updated. Pending jobs were cancelled; history was retained."}
 COMMON_TIMEZONES = ("Asia/Dhaka", "UTC", "Asia/Kolkata", "Asia/Karachi", "Asia/Dubai", "Asia/Singapore", "Asia/Tokyo",
                     "Europe/London", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Los_Angeles",
                     "Australia/Sydney")
@@ -110,6 +110,57 @@ async def schedule_detail(request: Request) -> Response:
                   notice=NOTICES.get(request.query.get("notice", ""), ""))
 
 
+async def schedule_edit_get(request: Request) -> Response:
+    try:
+        s = await request.ctx.schedules.get(request.user.id, request.path_params["schedule_id"])
+    except Exception as exc:
+        _not_found(exc)
+    if s["status"] != "paused":
+        raise HttpError(409)
+    spec=s["spec"]
+    from zoneinfo import ZoneInfo
+    once_at = spec.run_at.astimezone(ZoneInfo(spec.timezone)).strftime("%Y-%m-%dT%H:%M") if spec.run_at else ""
+    values={"kind":spec.kind,"timezone":spec.timezone,"once_at":once_at,
+            "times":", ".join(spec.times),"weekdays":list(spec.weekdays),
+            "every":str((spec.interval_minutes or 360)//(1440 if (spec.interval_minutes or 0)%1440==0 else (60 if (spec.interval_minutes or 0)%60==0 else 1))),
+            "unit":"days" if spec.interval_minutes and spec.interval_minutes%1440==0 else ("hours" if spec.interval_minutes and spec.interval_minutes%60==0 else "minutes"),
+            "starts":spec.starts_at.astimezone(ZoneInfo(spec.timezone)).strftime("%Y-%m-%dT%H:%M") if spec.starts_at else "",
+            "ends":spec.ends_at.astimezone(ZoneInfo(spec.timezone)).strftime("%Y-%m-%dT%H:%M") if spec.ends_at else ""}
+    targets=await request.ctx.db.fetch(
+        "SELECT g.id,g.title,g.is_enabled,g.permission_status FROM schedule_targets t JOIN telegram_groups g "
+        "ON g.id=t.group_id AND g.user_id=t.user_id WHERE t.schedule_id=$1 AND t.user_id=$2 ORDER BY lower(g.title)",
+        s["id"],request.user.id)
+    eligible=await request.ctx.db.fetch(
+        "SELECT g.id,g.title FROM post_targets pt JOIN telegram_groups g ON g.id=pt.group_id AND g.user_id=pt.user_id "
+        "AND g.account_id=pt.account_id WHERE pt.user_id=$1 AND pt.account_id=$2 AND pt.post_id=$3 "
+        "AND g.permission_status='ok' ORDER BY lower(g.title)", request.user.id,s["account_id"],s["post_id"])
+    return render(request,"schedule_edit.html",active="schedules",s=s,values=values,
+                  targets=[dict(x) for x in eligible],chosen={str(x["id"]).lower() for x in s["targets"]},
+                  errors=[],timezones=COMMON_TIMEZONES,weekday_names=recurrence.WEEKDAY_NAMES,
+                  min_interval=recurrence.MIN_INTERVAL_MINUTES)
+
+async def schedule_edit_post(request: Request) -> Response:
+    await _rate(request)
+    sid=request.path_params["schedule_id"]; f=request.form
+    try:
+        s=await request.ctx.schedules.get(request.user.id,sid)
+        values={k:f.get(k, "") for k in ("kind","timezone","once_at","times","every","unit","starts","ends")}
+        values["weekdays"]=[k[3:] for k in f if k.startswith("wd_")]
+        data=ScheduleInput(post_id=s["post_id"],group_ids={k[4:] for k in f if k.startswith("sel_")},
+            kind=values["kind"],timezone=values["timezone"],once_at=values["once_at"],times=values["times"],
+            weekdays=values["weekdays"],every=values["every"],unit=values["unit"],starts=values["starts"],ends=values["ends"])
+        await request.ctx.schedules.edit(request.user.id,sid,data)
+    except ScheduleInvalid as exc:
+        try:
+            s=await request.ctx.schedules.get(request.user.id,sid)
+            eligible=await request.ctx.db.fetch("SELECT g.id,g.title FROM post_targets pt JOIN telegram_groups g ON g.id=pt.group_id AND g.user_id=pt.user_id AND g.account_id=pt.account_id WHERE pt.user_id=$1 AND pt.account_id=$2 AND pt.post_id=$3 AND g.permission_status='ok' ORDER BY lower(g.title)",request.user.id,s["account_id"],s["post_id"])
+            return render(request,"schedule_edit.html",400,active="schedules",s=s,values=values,targets=[dict(x) for x in eligible],
+                chosen={x.lower() for x in data.group_ids},errors=exc.errors,timezones=COMMON_TIMEZONES,
+                weekday_names=recurrence.WEEKDAY_NAMES,min_interval=recurrence.MIN_INTERVAL_MINUTES)
+        except Exception as inner: _not_found(inner)
+    except Exception as exc: _not_found(exc)
+    return redirect(request,f"/schedules/{sid}?notice=edited")
+
 def _action(name: str, notice: str):
     async def handler(request: Request) -> Response:
         await _rate(request)
@@ -146,6 +197,8 @@ SCHEDULE_ROUTES = [
     Route("schedules-new", "GET", "/schedules/new/{post_id}", schedule_new, Auth.USER, P),
     Route("schedules-submit", "POST", "/schedules/new/{post_id}", schedule_submit, Auth.USER, P),
     Route("schedules-detail", "GET", "/schedules/{schedule_id}", schedule_detail, Auth.USER, P),
+    Route("schedules-edit", "GET", "/schedules/{schedule_id}/edit", schedule_edit_get, Auth.USER, P),
+    Route("schedules-edit-save", "POST", "/schedules/{schedule_id}/edit", schedule_edit_post, Auth.USER, P),
     Route("schedules-pause", "POST", "/schedules/{schedule_id}/pause", _action("pause", "paused"), Auth.USER, P),
     Route("schedules-resume", "POST", "/schedules/{schedule_id}/resume", _action("resume", "resumed"), Auth.USER, P),
     Route("schedules-cancel", "POST", "/schedules/{schedule_id}/cancel", _action("cancel", "cancelled"), Auth.USER, P),

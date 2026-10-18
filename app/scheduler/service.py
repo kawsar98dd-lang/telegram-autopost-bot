@@ -173,6 +173,8 @@ class ScheduleService:
                 "RETURNING id", post["id"], user_id, now)
             if locked is None:
                 raise PostLocked()
+        await self._queue.log(self._db, user_id, None, "info", "schedule_created",
+                              "Schedule created.", schedule_id=schedule_id, kind=spec.kind, targets=len(chosen))
         log.info("schedule created (schedule_id=%s kind=%s targets=%d)", schedule_id, spec.kind, len(chosen))
         return schedule_id
 
@@ -253,6 +255,68 @@ class ScheduleService:
             "RETURNING id", sched["id"], user_id, self._now())
         if row is None:
             raise ScheduleConflict()
+        await self._queue.log(self._db, user_id, None, "info", "schedule_paused",
+                              "Schedule paused; pending jobs will not begin sending.", schedule_id=sched["id"])
+
+    async def edit(self, user_id: str, schedule_id: str, data: ScheduleInput) -> None:
+        """Update a paused schedule in place. Post content/account are intentionally immutable here."""
+        sched = await self._owned(user_id, schedule_id)
+        if sched["status"] != "paused":
+            raise ScheduleConflict()
+        now = self._now()
+        errors: list[str] = []
+        wanted = {g.lower() for g in data.group_ids}
+        if not wanted or not all(is_uuid(g) for g in wanted):
+            errors.append("Choose at least one valid target group.")
+        try:
+            spec = recurrence.build_spec(kind=data.kind, tz_name=data.timezone, now=now, once_at=data.once_at,
+                times=data.times, weekdays=data.weekdays, every=data.every, unit=data.unit, starts=data.starts, ends=data.ends)
+        except ScheduleError as exc:
+            errors.extend(exc.errors); spec = None
+        eligible = await self._db.fetch(
+            "SELECT g.id FROM post_targets pt JOIN telegram_groups g ON g.id=pt.group_id AND g.user_id=pt.user_id "
+            "AND g.account_id=pt.account_id WHERE pt.user_id=$1 AND pt.account_id=$2 AND pt.post_id=$3 "
+            "AND g.permission_status='ok'", user_id, sched["account_id"], sched["post_id"])
+        allowed = {str(r["id"]).lower() for r in eligible}
+        if not wanted <= allowed:
+            errors.append("A selected group is no longer eligible. Refresh groups and choose eligible targets.")
+        if errors or spec is None:
+            raise ScheduleInvalid(errors)
+        nxt = recurrence.next_after(spec, now)
+        if nxt is None:
+            raise ScheduleInvalid(["This schedule has no future occurrence."])
+        async with self._db.transaction() as tx:
+            # Lock the schedule row so materialisation cannot race with editing.
+            lock_sql = "SELECT id FROM schedules WHERE id=$1 AND user_id=$2 AND status='paused' FOR UPDATE"
+            locked = await tx.fetchrow(lock_sql if getattr(self._db, "dialect", "postgres") == "postgres" else
+                                       "SELECT id FROM schedules WHERE id=$1 AND user_id=$2 AND status='paused'",
+                                       schedule_id, user_id)
+            if locked is None: raise ScheduleConflict()
+            await tx.execute(
+                "UPDATE schedules SET kind=$3, timezone=$4, run_at=$5, times_of_day=$6, days_of_week=$7, "
+                "interval_minutes=$8, starts_at=$9, ends_at=$10, next_run_at=$11, updated_at=$12 "
+                "WHERE id=$1 AND user_id=$2 AND status='paused'",
+                schedule_id, user_id, spec.kind, spec.timezone, spec.run_at, dumps(list(spec.times)),
+                dumps(list(spec.weekdays)), spec.interval_minutes, spec.starts_at, spec.ends_at, nxt, now)
+            # Pending snapshots refer to the old timing/targets. Mark them cancelled rather than deleting history;
+            # a future occurrence will be materialised after resume.
+            jobs = await tx.fetch(
+                "UPDATE posting_jobs SET status='cancelled', error_code='schedule_edited', "
+                "error_message='Cancelled because the paused schedule was edited.', finished_at=$3, "
+                "locked_by=NULL, lease_expires_at=NULL, updated_at=$3 WHERE schedule_id=$1 AND user_id=$2 "
+                "AND (status IN ('scheduled','waiting') OR (status='processing' AND delivery_state='not_sent')) "
+                "RETURNING id", schedule_id, user_id, now)
+            await tx.execute("DELETE FROM schedule_targets WHERE schedule_id=$1 AND user_id=$2", schedule_id, user_id)
+            for gid in sorted(wanted):
+                await tx.execute("INSERT INTO schedule_targets(schedule_id,group_id,user_id) VALUES($1,$2,$3)",
+                                 schedule_id, gid, user_id)
+            for job in jobs:
+                await self._queue.log(tx, user_id, str(job["id"]), "info", "cancelled",
+                    "Pending job cancelled because its schedule was edited.", schedule_id=schedule_id, reason="schedule_edited")
+            await self._queue.log(tx, user_id, None, "info", "schedule_edited",
+                "Paused schedule settings updated; pending jobs were cancelled and history retained.",
+                schedule_id=schedule_id, cancelled_pending_jobs=len(jobs), targets=len(wanted))
+        # Keep the post content untouched and the schedule id stable.
 
     async def resume(self, user_id: str, schedule_id: str) -> None:
         sched = await self._owned(user_id, schedule_id)
@@ -268,6 +332,8 @@ class ScheduleService:
             "AND status = 'paused' RETURNING id", sched["id"], user_id, nxt, now)
         if row is None:
             raise ScheduleConflict()
+        await self._queue.log(self._db, user_id, None, "info", "schedule_resumed",
+                              "Schedule resumed; missed paused occurrences are skipped.", schedule_id=sched["id"])
 
     async def cancel(self, user_id: str, schedule_id: str) -> int:
         """Stop a schedule and cancel its not-yet-sending jobs. A job that has already started sending cannot be recalled."""

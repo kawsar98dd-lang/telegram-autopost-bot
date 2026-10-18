@@ -157,5 +157,37 @@ class ScheduleFlowTests(WebSchedBase):
         self.assertEqual((await self.alice.get(f"/schedules/new/{post}")).status, 409)   # already scheduled
 
 
+    async def test_paused_schedule_edit_preserves_id_and_updates_settings(self):
+        post, sid = await self.make_schedule()
+        detail = await self.alice.get(f"/schedules/{sid}")
+        token = self.alice.csrf(detail.body)
+        self.assertEqual((await self.alice.post(f"/schedules/{sid}/pause", {"csrf_token": token})).status, 303)
+        edit = await self.alice.get(f"/schedules/{sid}/edit")
+        self.assertEqual(edit.status, 200)
+        self.assertIn('value="Asia/Dhaka"', edit.body)
+        form = {"csrf_token": self.alice.csrf(edit.body), "kind":"daily", "timezone":"Asia/Dhaka",
+                "once_at":"", "times":"10:30", "every":"6", "unit":"hours", "starts":"", "ends":"",
+                f"sel_{self.g_ok}":"1"}
+        saved = await self.alice.post(f"/schedules/{sid}/edit", form)
+        self.assertEqual(saved.status, 303, re.findall(r"<li>(.*?)</li>", saved.body)[:10])
+        row = self.env.db.conn.execute("SELECT id,status,kind,timezone FROM schedules WHERE id=?", (sid,)).fetchone()
+        self.assertEqual(tuple(row), (sid,"paused","daily","Asia/Dhaka"))
+        self.assertIn("Schedule updated", (await self.alice.get(f"/schedules/{sid}", query="notice=edited")).body)
+        self.assertEqual((await self.alice.post(f"/schedules/{sid}/resume", {"csrf_token":self.alice.csrf((await self.alice.get(f"/schedules/{sid}")).body)})).status,303)
+
+    async def test_logs_are_user_scoped_and_filters_work(self):
+        log_id="22222222-2222-4222-8222-222222222222"
+        self.env.db.conn.execute("INSERT INTO posting_logs(id,user_id,job_id,level,event,message,details,created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (log_id,self.env.admin_id,None,"error","test_event","Safe test message",'{}',"2027-01-16 03:00:00.000000"))
+        self.env.db.conn.commit()
+        page=await self.alice.get("/logs")
+        self.assertEqual(page.status,200); self.assertIn("Safe test message",page.body)
+        self.assertNotIn(log_id,(await self.bob.get("/logs")).body)
+        filtered=await self.alice.post("/logs",{"csrf_token":self.alice.csrf(page.body),"level":"error","event":"test_event","start":"2027-01-16","end":"2027-01-16"})
+        self.assertEqual(filtered.status,200); self.assertIn("Safe test message",filtered.body)
+        self.assertEqual((await self.bob.get(f"/logs/{log_id}")).status,404)
+        self.assertEqual((await self.alice.get(f"/logs/{log_id}")).status,200)
+
+
 if __name__ == "__main__":
     unittest.main()

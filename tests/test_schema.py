@@ -1,6 +1,7 @@
 import re
 import sqlite3
 import unittest
+from enum import Enum
 
 from tests.support import SqliteDb, SqliteMigrationDriver, migrated_db
 from app.db import models
@@ -35,14 +36,16 @@ class Fixture:
 class MigrationRunnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_applies_once_and_is_idempotent(self):
         db = SqliteDb()
+        self.addCleanup(db.close)
         driver = SqliteMigrationDriver(db)
         first = await run_migrations(driver, discover())
         second = await run_migrations(driver, discover())
-        self.assertEqual(first, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups", "0005_posts", "0006_scheduler"])
+        self.assertEqual(first, ["0001_initial", "0002_auth", "0003_telegram_connect", "0004_telegram_groups", "0005_posts", "0006_scheduler", "0007_safety_notifications"])
         self.assertEqual(second, [])
 
     async def test_modified_migration_is_refused(self):
         db = SqliteDb()
+        self.addCleanup(db.close)
         driver = SqliteMigrationDriver(db)
         await run_migrations(driver, [Migration("0001", "x", "CREATE TABLE t (a INT);")])
         with self.assertRaises(MigrationError):
@@ -50,6 +53,7 @@ class MigrationRunnerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_migration_rolls_back(self):
         db = SqliteDb()
+        self.addCleanup(db.close)
         driver = SqliteMigrationDriver(db)
         with self.assertRaises(sqlite3.Error):
             await run_migrations(driver, [Migration("0001", "bad", "CREATE TABLE ok (a INT); CREATE TABLE ok (a INT);")])
@@ -60,6 +64,7 @@ class MigrationRunnerTests(unittest.IsolatedAsyncioTestCase):
 class SchemaTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.db = await migrated_db()
+        self.addCleanup(self.db.close)
         self.fx = Fixture(self.db)
         self.c = self.db.conn
 
@@ -67,7 +72,7 @@ class SchemaTests(unittest.IsolatedAsyncioTestCase):
         tables = {r[0] for r in self.c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         required = {"users", "telegram_accounts", "telegram_sessions", "telegram_groups", "posts", "schedules",
                     "schedule_targets", "posting_jobs", "posting_logs", "settings", "license_activation",
-                    "auth_sessions", "rate_limits", "telegram_login_attempts"}
+                    "auth_sessions", "rate_limits", "telegram_login_attempts", "safety_notifications"}
         self.assertLessEqual(required, tables)
 
     def test_enums_match_check_constraints(self):
@@ -84,6 +89,8 @@ class SchemaTests(unittest.IsolatedAsyncioTestCase):
             ("post_media", "kind"): models.MediaKind,
             ("post_media", "content_type"): models.MediaContentType,
             ("post_media", "storage_backend"): models.StorageBackend,
+            ("safety_notifications", "severity"): Enum("SafetySeverity", {"INFO": "info", "LOW": "low", "REVIEW": "review", "HIGH": "high"}),
+            ("safety_notifications", "status"): Enum("SafetyStatus", {"NEW": "new", "READ": "read", "RESOLVED": "resolved"}),
         }
         found = {}
         for table, body in re.findall(r"CREATE TABLE (\w+) \((.*?)\n\);", SQL, re.S):
@@ -175,6 +182,7 @@ class LicenseStoreTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_roundtrip_encrypts_key_at_rest(self):
         db = await migrated_db()
+        self.addCleanup(db.close)
         store = DbLicenseStore(db, Cipher(generate_key()))
         self.assertIsNone(await store.load())
         await store.save(self.record())
@@ -190,12 +198,14 @@ class LicenseStoreTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_wrong_encryption_key_cannot_read_license(self):
         db = await migrated_db()
+        self.addCleanup(db.close)
         await DbLicenseStore(db, Cipher(generate_key())).save(self.record())
         with self.assertRaises(DecryptionError):
             await DbLicenseStore(db, Cipher(generate_key())).load()
 
     async def test_installation_id_is_stable(self):
         db = await migrated_db()
+        self.addCleanup(db.close)
         first = await get_or_create_installation_id(db)
         self.assertEqual(first, await get_or_create_installation_id(db))
         self.assertEqual(len(first), 36)
@@ -204,6 +214,7 @@ class LicenseStoreTests(unittest.IsolatedAsyncioTestCase):
 class LicenseServerSchemaTests(unittest.TestCase):
     def test_server_schema_is_valid_sql(self):
         conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript((MIGRATIONS_DIR.parent / "license_server" / "schema.sql").read_text(encoding="utf-8"))
         conn.execute("INSERT INTO customers (id, name) VALUES ('c1', 'Acme')")

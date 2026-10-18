@@ -1,0 +1,34 @@
+{% extends "shell.html" %}
+{% block title %}Posting Logs · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Posting logs</h1>
+<p class="muted">Posting and schedule audit history for your account. Secrets and post text are not shown.</p>
+{% if error %}<p class="msg bad">{{ error }}</p>{% endif %}
+<section class="card">
+<form method="post" action="/logs" class="filters">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>From <input type="date" name="start" value="{{ filters.start }}"></label>
+<label>To <input type="date" name="end" value="{{ filters.end }}"></label>
+<label>Level <select name="level"><option value="">All levels</option>{% for x in ['info','warning','error'] %}<option value="{{ x }}" {{ 'selected' if filters.level==x }}>{{ x|upper }}</option>{% endfor %}</select></label>
+<label>Event <select name="event"><option value="">All events</option>{% for x in events %}<option value="{{ x }}" {{ 'selected' if filters.event==x }}>{{ x }}</option>{% endfor %}</select></label>
+<label>Status <select name="status"><option value="">All statuses</option>{% for x in ['scheduled','processing','waiting','posted','failed','cancelled'] %}<option value="{{ x }}" {{ 'selected' if filters.status==x }}>{{ x|replace('_',' ')|title }}</option>{% endfor %}</select></label>
+<button class="btn" type="submit">Apply filters</button> <a class="btn secondary" href="/logs">Clear</a>
+</form></section>
+<section class="card">
+<p class="muted">{{ total }} event{{ '' if total==1 else 's' }} · page {{ page }} of {{ pages }}</p>
+{% if rows %}
+<div class="table-wrap"><table data-responsive-cards><thead><tr><th>Time (UTC)</th><th>Level</th><th>Event</th><th>Message</th><th>Job / Schedule</th><th>Group</th><th>Status</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr>
+<td data-label="Time">{{ r.created_at|utc }}</td><td data-label="Level"><span class="badge {{ 'bad' if r.level=='error' else ('warn' if r.level=='warning' else 'ok') }}">{{ r.level|upper }}</span></td>
+<td data-label="Event">{{ r.event }}</td><td data-label="Message">{{ r.message }}</td>
+<td data-label="Job / Schedule">{% if r.job_id %}<a href="/jobs">Job details</a>{% endif %}{% if r.schedule_id %} · <a href="/schedules/{{ r.schedule_id }}">Schedule</a>{% endif %}</td>
+<td data-label="Group">{{ r.current_group_title or r.group_title or '-' }}</td><td data-label="Status">{{ r.job_status or '-' }}{% if r.delivery_state %} / {{ r.delivery_state }}{% endif %}</td>
+<td><a href="/logs/{{ r.id }}">Details</a></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="empty-state"><h2>No logs found</h2><p>There are no posting events matching these filters yet.</p><a href="/logs">Clear filters</a></div>{% endif %}
+{% if pages > 1 %}<nav class="pagination" aria-label="Log pages">
+{% if page > 1 %}<a class="btn secondary" href="/logs?start={{ filters.start }}&end={{ filters.end }}&level={{ filters.level }}&event={{ filters.event }}&status={{ filters.status }}&page={{ page-1 }}">Previous</a>{% endif %}
+{% if page < pages %}<a class="btn secondary" href="/logs?start={{ filters.start }}&end={{ filters.end }}&level={{ filters.level }}&event={{ filters.event }}&status={{ filters.status }}&page={{ page+1 }}">Next</a>{% endif %}
+</nav>{% endif %}
+</section>
+{% endblock %}

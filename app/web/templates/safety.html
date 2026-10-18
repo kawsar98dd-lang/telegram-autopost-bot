@@ -1,0 +1,44 @@
+{% extends "shell.html" %}
+{% block title %}{{ messages.title }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="safety-page" lang="{{ lang }}" dir="{{ 'rtl' if lang in ['ar','ur'] else 'ltr' }}">
+  <header class="page-heading">
+    <div><h1>{{ messages.title }}</h1><p class="muted">{{ messages.intro }}</p></div>
+  </header>
+  <div class="grid safety-stats">
+    <section class="card stat"><h3>{{ messages.count }}</h3><p class="big">{{ active_count }}</p></section>
+    <section class="card stat"><h3>Active schedules</h3><p class="big">{{ counts.schedules }}</p></section>
+    <section class="card stat"><h3>Jobs · 7 days</h3><p class="big">{{ counts.recent_jobs }}</p></section>
+    <section class="card stat"><h3>Failed jobs · 7 days</h3><p class="big">{{ counts.failed_jobs }}</p></section>
+  </div>
+  <section class="card safety-assistant">
+    <h2>{{ messages.question }}</h2><p class="muted">{{ messages.help }}</p>
+    <form method="post" action="/safety" class="safety-question-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="safety-lang">Language / ভাষা</label><select id="safety-lang" name="language">
+        <option value="bn" {{ 'selected' if lang=='bn' else '' }}>বাংলা</option><option value="en" {{ 'selected' if lang=='en' else '' }}>English</option>
+        <option value="hi" {{ 'selected' if lang=='hi' else '' }}>हिन्दी</option><option value="ur" {{ 'selected' if lang=='ur' else '' }}>اردو</option><option value="ar" {{ 'selected' if lang=='ar' else '' }}>العربية</option>
+      </select>
+      <label class="sr-only" for="safety-question">{{ messages.question }}</label>
+      <textarea id="safety-question" name="question" maxlength="500" rows="3" required placeholder="{{ messages.question }}">{{ question }}</textarea>
+      <button class="btn" type="submit">{{ messages.ask }}</button>
+    </form>
+    {% if answer %}<div class="safety-answer" role="status"><strong>{{ messages.recommend }}</strong><p>{{ answer }}</p></div>{% endif %}
+  </section>
+  <section class="card">
+    <h2>{{ messages.count }} · {{ rows|length }}</h2>
+    {% if not rows %}<p class="muted">{{ messages.empty }}</p>{% else %}
+      <div class="safety-notifications">
+      {% for item in rows %}
+        <article class="safety-notification severity-{{ item.severity }}">
+          <div class="safety-notification-head"><span class="risk-badge risk-{{ item.severity }}">{{ item.severity|replace('_',' ')|title }}</span><time>{{ item.created_at|utc }}</time><span class="notification-status">{{ item.status|title }}</span></div>
+          <h3>{{ item.title }}</h3><p><strong>{{ messages.observed }}:</strong> {{ item.evidence }}</p><p><strong>{{ messages.recommend }}:</strong> {{ item.recommendation }}</p>
+          {% if item.status == 'new' %}<form method="post" action="/safety/notifications/{{ item.id }}/ack"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">{{ messages.ack }}</button></form>{% endif %}
+        </article>
+      {% endfor %}
+      </div>
+    {% endif %}
+    <p class="muted safety-disclaimer">{{ messages.empty }} Risk labels are local review indicators, not Telegram risk scores. Warnings cannot guarantee account safety.</p>
+  </section>
+</div>
+{% endblock %}

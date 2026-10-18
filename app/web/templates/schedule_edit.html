@@ -1,0 +1,25 @@
+{% extends "shell.html" %}
+{% block title %}Edit schedule · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>Edit schedule</h1><p class="muted">Schedule ID stays the same. Post content is not changed here.</p>
+{% if errors %}<ul class="msg bad">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<section class="card"><h2>{{ s.title or 'Scheduled post' }}</h2>
+<p class="msg warn">This schedule must remain paused while editing. Saving cancels pending/queued jobs tied to the old settings, but keeps their history. A request already in flight may not be recallable. Resume only after reviewing the saved settings.</p>
+<form method="post" action="/schedules/{{ s.id }}/edit">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<h2>Target groups</h2>
+{% for g in targets %}<p><label class="check"><input type="checkbox" name="sel_{{ g.id }}" value="1" {{ 'checked' if g.id|string|lower in chosen }}> {{ g.title }}</label></p>{% endfor %}
+{% if not targets %}<p class="msg bad">No eligible groups are available. Refresh group permissions before editing.</p>{% endif %}
+<h2>Timing</h2>
+<label>Schedule type <select name="kind">{% for k,label in [('once','One time'),('daily','Every day'),('weekly','Selected weekdays'),('custom','Custom interval')] %}<option value="{{ k }}" {{ 'selected' if values.kind==k }}>{{ label }}</option>{% endfor %}</select></label>
+<label>Timezone (IANA) <input name="timezone" value="{{ values.timezone }}" required></label>
+<label>One-time date/time <input type="datetime-local" name="once_at" value="{{ values.once_at }}"></label>
+<label>Times of day (comma-separated HH:MM) <input name="times" value="{{ values.times }}"></label>
+<p>Weekdays</p>{% for d in weekday_names %}<label class="check"><input type="checkbox" name="wd_{{ loop.index0 }}" value="1" {{ 'checked' if loop.index0 in values.weekdays }}> {{ d }}</label>{% endfor %}
+<label>Every <input name="every" inputmode="numeric" value="{{ values.every }}" maxlength="6"></label>
+<label>Interval unit <select name="unit">{% for u in ['minutes','hours','days'] %}<option value="{{ u }}" {{ 'selected' if values.unit==u }}>{{ u }}</option>{% endfor %}</select></label>
+<label>Start date/time <input type="datetime-local" name="starts" value="{{ values.starts }}"></label>
+<label>End date/time (optional) <input type="datetime-local" name="ends" value="{{ values.ends }}"></label>
+<div class="actions"><button class="btn" type="submit" data-confirm="Save these schedule settings? Pending jobs will be cancelled and the schedule remains paused.">Save changes</button> <a class="btn secondary" href="/schedules/{{ s.id }}">Cancel editing</a></div>
+</form></section>
+{% endblock %}

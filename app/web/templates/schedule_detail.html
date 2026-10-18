@@ -15,12 +15,13 @@
   {% if s.status == 'active' %}
     <form method="post" action="/schedules/{{ s.id }}/pause" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Pause</button></form>
   {% elif s.status == 'paused' %}
+    <a class="btn secondary" href="/schedules/{{ s.id }}/edit">Edit schedule</a>
     <form method="post" action="/schedules/{{ s.id }}/resume" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn" type="submit">Resume</button></form>
   {% endif %}
   {% if s.status in ('active', 'paused') or s.jobs|selectattr('status', 'in', ['scheduled', 'waiting'])|list %}
     <form method="post" action="/schedules/{{ s.id }}/cancel" class="inline" data-confirm="Cancel this schedule and every job that has not started sending?"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn secondary" type="submit">Cancel</button></form>
   {% endif %}
-  <p class="hint">Pausing stops everything that has not started sending, including queued jobs. Cancelling cannot be undone. A post that is already being sent cannot be recalled.</p>
+  <p class="hint">Pausing prevents new occurrences and queued jobs from passing the final send gate. Editing cancels pending jobs tied to the old settings while retaining history. Cancelling cannot be undone. A Telegram request already in flight may not be recallable.</p>
 </section>
 <section class="card">
   <h2>Recent jobs</h2>

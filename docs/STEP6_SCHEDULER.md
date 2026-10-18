@@ -172,3 +172,12 @@ No test sends a real message. The offline tests run the same SQL on SQLite (the 
 * Image bytes must be in the storage backend the worker is configured for (`MEDIA_STORAGE`); `local` storage requires a shared volume.
 * Free Render plans have no background workers and sleep when idle; use a paid worker or the Docker deployment for real posting.
 * The pages `Logs` is still a placeholder; history is shown on `/jobs` and on each schedule.
+
+
+## Logs and safe schedule editing (0.1.3)
+
+Open **Logs** from the application navigation to review customer-facing posting/audit events. Filters include date range, level, event type, and posting-job status; results are paginated. Each entry's details view shows only structured audit metadata, not post body or credentials. Links to the owning schedule and posting-job history are provided where available. Every query is scoped to the signed-in user.
+
+To change timing or targets, open the schedule details, choose **Pause**, then **Edit schedule**. The edit form is pre-populated and does not edit the post body. Save updates the same schedule ID and leaves the schedule paused. Pending/queued jobs created from the old settings are marked cancelled (not deleted) and logged; already-sending requests cannot be recalled. Review the saved schedule and choose **Resume** when ready. Occurrences missed while paused are skipped; resume computes the next valid occurrence rather than catching up all missed posts. Jobs whose delivery is uncertain are not automatically resent.
+
+No database migration is required: the existing `posting_logs`, `posting_jobs`, `schedules`, and `schedule_targets` tables are used. Deploy the web application and worker from the same updated source so the final send gate and UI/service behavior match.

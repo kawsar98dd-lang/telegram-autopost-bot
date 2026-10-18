@@ -14,6 +14,7 @@ NAV = [
     ("schedules", "/schedules", "Schedules"),
     ("jobs", "/jobs", "Posting jobs"),
     ("logs", "/logs", "Logs"),
+    ("safety", "/safety", "Safety Monitoring"),
     ("account", "/account", "Account"),
 ]
 

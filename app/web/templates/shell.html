@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
 <header class="topbar">
-  <button class="menu-btn" type="button" data-toggle-nav aria-label="Menu">&#9776;</button>
+  <button class="menu-btn" type="button" data-toggle-nav aria-label="Open navigation menu" aria-controls="sidebar" aria-expanded="false">&#9776;</button>
   <a class="brand" href="/">{{ app_name }}</a>
   <div class="spacer"></div>
   <span class="who">{{ user.display_name or user.email }}</span>
